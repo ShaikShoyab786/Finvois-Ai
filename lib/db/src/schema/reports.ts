@@ -11,6 +11,7 @@ export const reportsTable = pgTable("reports", {
   status: text("status").notNull().default("processing"),
   extractedData: jsonb("extracted_data"),
   rawText: text("raw_text"),
+  errorMessage: text("error_message"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

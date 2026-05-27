@@ -128,14 +128,30 @@ Extract the following structure:
   }
 }`;
 
+function extractJsonFromText(text: string): string {
+  let t = text.trim();
+  // Strip leading/trailing markdown code fences like ```json ... ``` or ``` ... ```
+  const fenceMatch = t.match(/^```(?:json)?\s*\n?([\s\S]*?)\n?```$/);
+  if (fenceMatch) {
+    t = fenceMatch[1].trim();
+  }
+  // Fallback: slice between first '{' and last '}'
+  const firstBrace = t.indexOf("{");
+  const lastBrace = t.lastIndexOf("}");
+  if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+    t = t.slice(firstBrace, lastBrace + 1);
+  }
+  return t;
+}
+
 export async function extractDprData(rawText: string): Promise<Record<string, unknown>> {
-  logger.info("Starting DPR extraction via Anthropic Claude");
+  logger.info({ textLength: rawText.length }, "Starting DPR extraction via Anthropic Claude");
 
   const truncatedText = rawText.slice(0, 60000);
 
   const response = await client.messages.create({
-    model: "claude-sonnet-4-5",
-    max_tokens: 8000,
+    model: "claude-sonnet-4-6",
+    max_tokens: 8192,
     messages: [
       {
         role: "user",
@@ -149,10 +165,15 @@ export async function extractDprData(rawText: string): Promise<Record<string, un
     throw new Error("Unexpected response type from AI");
   }
 
-  const jsonText = content.text.trim();
-  const parsed = JSON.parse(jsonText);
-  logger.info("DPR extraction completed successfully");
-  return parsed;
+  const jsonText = extractJsonFromText(content.text);
+  try {
+    const parsed = JSON.parse(jsonText);
+    logger.info("DPR extraction completed successfully");
+    return parsed;
+  } catch (err) {
+    logger.error({ err, snippet: jsonText.slice(0, 500) }, "Failed to parse AI JSON response");
+    throw new Error(`AI returned invalid JSON: ${(err as Error).message}`);
+  }
 }
 
 export async function generateExecutiveSummary(extractedData: Record<string, unknown>): Promise<{
@@ -166,8 +187,8 @@ export async function generateExecutiveSummary(extractedData: Record<string, unk
   const dataStr = JSON.stringify(extractedData, null, 2).slice(0, 20000);
 
   const response = await client.messages.create({
-    model: "claude-sonnet-4-5",
-    max_tokens: 2000,
+    model: "claude-sonnet-4-6",
+    max_tokens: 8192,
     messages: [
       {
         role: "user",
@@ -194,7 +215,13 @@ ${dataStr}`,
     throw new Error("Unexpected response type from AI");
   }
 
-  const parsed = JSON.parse(content.text.trim());
-  logger.info("Executive summary generated");
-  return parsed;
+  const jsonText = extractJsonFromText(content.text);
+  try {
+    const parsed = JSON.parse(jsonText);
+    logger.info("Executive summary generated");
+    return parsed;
+  } catch (err) {
+    logger.error({ err, snippet: jsonText.slice(0, 500) }, "Failed to parse summary JSON");
+    throw new Error(`AI returned invalid JSON: ${(err as Error).message}`);
+  }
 }

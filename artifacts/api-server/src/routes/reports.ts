@@ -96,11 +96,66 @@ router.post("/reports/upload", upload.single("file"), async (req, res): Promise<
 
       logger.info({ id: placeholder.id }, "Report extraction completed");
     } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
       logger.error({ err, id: placeholder.id }, "Report extraction failed");
       await db
         .update(reportsTable)
-        .set({ status: "failed" })
+        .set({ status: "failed", errorMessage: errMsg })
         .where(eq(reportsTable.id, placeholder.id));
+    }
+  });
+});
+
+router.post("/reports/:id/retry", async (req, res): Promise<void> => {
+  const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const id = parseInt(raw, 10);
+  if (isNaN(id)) {
+    res.status(400).json({ error: "Invalid report ID" });
+    return;
+  }
+
+  const [report] = await db.select().from(reportsTable).where(eq(reportsTable.id, id));
+  if (!report) {
+    res.status(404).json({ error: "Report not found" });
+    return;
+  }
+  if (!report.rawText) {
+    res.status(400).json({ error: "No raw text stored for this report; please re-upload." });
+    return;
+  }
+
+  await db
+    .update(reportsTable)
+    .set({ status: "processing", errorMessage: null })
+    .where(eq(reportsTable.id, id));
+
+  res.status(202).json({ id, status: "processing" });
+
+  setImmediate(async () => {
+    try {
+      const extractedData = await extractDprData(report.rawText!);
+      const bp = extractedData.businessProfile as Record<string, unknown> | undefined;
+      const fs = extractedData.financialSummary as Record<string, unknown> | undefined;
+
+      await db
+        .update(reportsTable)
+        .set({
+          firmName: (bp?.firmName as string) || "Unknown Firm",
+          proprietorName: (bp?.proprietorName as string) || "Unknown Proprietor",
+          lineOfActivity: (bp?.lineOfActivity as string) || null,
+          totalProjectCost: (fs?.totalProjectCost as string) || null,
+          extractedData,
+          status: "ready",
+        })
+        .where(eq(reportsTable.id, id));
+      logger.info({ id }, "Report retry succeeded");
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      logger.error({ err, id }, "Report retry failed");
+      await db
+        .update(reportsTable)
+        .set({ status: "failed", errorMessage: errMsg })
+        .where(eq(reportsTable.id, id));
     }
   });
 });
