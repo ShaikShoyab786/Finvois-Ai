@@ -1,9 +1,9 @@
 import { useState, useRef, useCallback } from "react";
 import { useLocation, Link } from "wouter";
-import { useListReports, useUploadReport, useDeleteReport, getListReportsQueryKey } from "@workspace/api-client-react";
+import { useListReports, useDeleteReport, getListReportsQueryKey } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Upload, FileText, Trash2, ArrowRight, Loader2, Plus, AlertCircle, RefreshCw } from "lucide-react";
+import { Upload, FileText, Trash2, ArrowRight, Loader2, AlertCircle, RefreshCw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -15,7 +15,6 @@ export default function Home() {
   const queryClient = useQueryClient();
   
   const { data: reports, isLoading, isError, refetch } = useListReports();
-  const uploadMutation = useUploadReport();
   const deleteMutation = useDeleteReport();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -33,51 +32,46 @@ export default function Home() {
   }, []);
 
   const processFile = async (file: File) => {
-    if (file.type !== "application/pdf") {
+    if (file.type !== "application/pdf" && !file.name.endsWith(".pdf")) {
       toast({
         title: "Invalid file type",
         description: "Please upload a PDF file.",
-        variant: "destructive"
+        variant: "destructive",
       });
       return;
     }
 
     setUploading(true);
-    
-    // Create FormData manually since we're using a file
-    const formData = new FormData();
-    formData.append("file", file);
 
     try {
-      // The API client takes a ReportUpload type, but underneath it sends FormData.
-      // We will override the fetch call directly or try to conform.
-      // Looking at `api.ts`, uploadReport expects { filename: string } and constructs a FormData.
-      // Wait, let's look at `uploadReport` implementation:
-      // it takes `ReportUpload` (which is { filename: string }) and creates a FormData: `formData.append('filename', reportUpload.filename)`.
-      // It doesn't actually take the file object in the generated client.
-      // Let's use the mutation with a mock, but wait, the prompt says:
-      // "The frontend must use a real `<input type="file" accept=".pdf">` and append the file to a `FormData` object with key `"file"`, then call `useUploadReport`."
-      // Let's pass what's needed. We might need to bypass type checking or use custom fetch if the generated client is broken, but we'll try to pass what we can.
-      // Let's look at `ReportUpload`: { filename: string }
-      // This is a known issue with orval + multipart form data.
-      // We will use the mutation anyway.
-      
-      const res = await uploadMutation.mutateAsync({ data: { filename: file.name } });
-      
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const base = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
+      const response = await fetch(`${base}/api/reports/upload`, {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errBody = await response.json().catch(() => ({ error: "Upload failed" }));
+        throw new Error(errBody.error || "Upload failed");
+      }
+
+      const res = await response.json();
+
       toast({
         title: "Upload successful",
-        description: "Your DPR has been processed.",
+        description: "Your DPR is being processed by AI. This may take a moment.",
       });
-      
+
       queryClient.invalidateQueries({ queryKey: getListReportsQueryKey() });
       setLocation(`/reports/${res.id}`);
-      
     } catch (err) {
-      console.error(err);
       toast({
         title: "Upload failed",
-        description: "There was an error processing the PDF.",
-        variant: "destructive"
+        description: err instanceof Error ? err.message : "There was an error processing the PDF.",
+        variant: "destructive",
       });
     } finally {
       setUploading(false);
