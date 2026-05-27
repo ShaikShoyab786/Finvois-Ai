@@ -1,5 +1,7 @@
 import { Router, type IRouter } from "express";
 import multer from "multer";
+// Import the internal module to avoid pdf-parse@1.1.1 reading a test file at startup
+import pdfParse from "pdf-parse/lib/pdf-parse.js";
 import { db, reportsTable } from "@workspace/db";
 import { eq, desc } from "drizzle-orm";
 import { extractDprData, generateExecutiveSummary } from "../lib/extractDpr";
@@ -41,10 +43,7 @@ router.post("/reports/upload", upload.single("file"), async (req, res): Promise<
 
   let rawText = "";
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const pdfParseModule = await import("pdf-parse") as any;
-    const pdfParseFn = pdfParseModule.default ?? pdfParseModule;
-    const parsed = await pdfParseFn(req.file.buffer);
+    const parsed = await pdfParse(req.file.buffer);
     rawText = parsed.text;
   } catch (err) {
     req.log.error({ err }, "Failed to parse PDF");
