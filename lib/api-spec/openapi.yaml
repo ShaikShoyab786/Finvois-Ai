@@ -3,13 +3,15 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Finvois AI Assistant API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: reports
+    description: DPR Report operations
 paths:
   /healthz:
     get:
@@ -24,6 +26,122 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /reports:
+    get:
+      operationId: listReports
+      tags: [reports]
+      summary: List all uploaded DPR reports
+      responses:
+        "200":
+          description: List of reports
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ReportSummary"
+
+  /reports/upload:
+    post:
+      operationId: uploadReport
+      tags: [reports]
+      summary: Upload a DPR PDF and extract structured data via AI
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/ReportUpload"
+      responses:
+        "201":
+          description: Report processed and stored
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Report"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /reports/{id}:
+    get:
+      operationId: getReport
+      tags: [reports]
+      summary: Get a single DPR report with full extracted data
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Full report data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Report"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteReport
+      tags: [reports]
+      summary: Delete a report
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /reports/{id}/summary:
+    get:
+      operationId: getReportSummary
+      tags: [reports]
+      summary: Get AI-generated executive summary for a report
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Executive summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExecutiveSummary"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +152,393 @@ components:
       required:
         - status
 
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
+
+    ReportUpload:
+      type: object
+      properties:
+        filename:
+          type: string
+      required:
+        - filename
+
+    ReportSummary:
+      type: object
+      required: [id, firmName, proprietorName, createdAt, status]
+      properties:
+        id:
+          type: integer
+        firmName:
+          type: string
+        proprietorName:
+          type: string
+        lineOfActivity:
+          type: ["string", "null"]
+        totalProjectCost:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+        status:
+          type: string
+
+    Report:
+      type: object
+      required: [id, firmName, proprietorName, createdAt, status, extractedData]
+      properties:
+        id:
+          type: integer
+        firmName:
+          type: string
+        proprietorName:
+          type: string
+        createdAt:
+          type: string
+        status:
+          type: string
+        extractedData:
+          $ref: "#/components/schemas/ExtractedDprData"
+
+    ExtractedDprData:
+      type: object
+      properties:
+        businessProfile:
+          $ref: "#/components/schemas/BusinessProfile"
+        financialSummary:
+          $ref: "#/components/schemas/FinancialSummary"
+        plAccount:
+          $ref: "#/components/schemas/PlAccount"
+        balanceSheet:
+          $ref: "#/components/schemas/BalanceSheet"
+        ratioAnalysis:
+          $ref: "#/components/schemas/RatioAnalysis"
+        cashFlow:
+          $ref: "#/components/schemas/CashFlow"
+        loanSchedule:
+          $ref: "#/components/schemas/LoanSchedule"
+        swotAnalysis:
+          $ref: "#/components/schemas/SwotAnalysis"
+        financialEvaluation:
+          $ref: "#/components/schemas/FinancialEvaluation"
+        employmentGeneration:
+          $ref: "#/components/schemas/EmploymentGeneration"
+        projectCost:
+          $ref: "#/components/schemas/ProjectCost"
+
+    BusinessProfile:
+      type: object
+      properties:
+        firmName:
+          type: ["string", "null"]
+        proprietorName:
+          type: ["string", "null"]
+        constitution:
+          type: ["string", "null"]
+        lineOfActivity:
+          type: ["string", "null"]
+        unitAddress:
+          type: ["string", "null"]
+        location:
+          type: ["string", "null"]
+        panNo:
+          type: ["string", "null"]
+        aadharNo:
+          type: ["string", "null"]
+        mobile:
+          type: ["string", "null"]
+        age:
+          type: ["string", "null"]
+        gender:
+          type: ["string", "null"]
+        caste:
+          type: ["string", "null"]
+        education:
+          type: ["string", "null"]
+        experience:
+          type: ["string", "null"]
+        powerRequirement:
+          type: ["string", "null"]
+        commercialProductionDate:
+          type: ["string", "null"]
+        preparedBy:
+          type: ["string", "null"]
+
+    FinancialSummary:
+      type: object
+      properties:
+        termLoan:
+          type: ["string", "null"]
+        workingCapitalLoan:
+          type: ["string", "null"]
+        equityCapital:
+          type: ["string", "null"]
+        totalProjectCost:
+          type: ["string", "null"]
+        averageDscr:
+          type: ["string", "null"]
+        fiscalYear:
+          type: ["string", "null"]
+
+    PlAccount:
+      type: object
+      properties:
+        years:
+          type: array
+          items:
+            type: string
+        revenue:
+          type: array
+          items:
+            type: ["number", "null"]
+        grossProfit:
+          type: array
+          items:
+            type: ["number", "null"]
+        netProfit:
+          type: array
+          items:
+            type: ["number", "null"]
+        expenses:
+          type: array
+          items:
+            type: ["number", "null"]
+        depreciation:
+          type: array
+          items:
+            type: ["number", "null"]
+        interest:
+          type: array
+          items:
+            type: ["number", "null"]
+
+    BalanceSheet:
+      type: object
+      properties:
+        years:
+          type: array
+          items:
+            type: string
+        currentAssets:
+          type: array
+          items:
+            type: ["number", "null"]
+        fixedAssets:
+          type: array
+          items:
+            type: ["number", "null"]
+        currentLiabilities:
+          type: array
+          items:
+            type: ["number", "null"]
+        longTermLiabilities:
+          type: array
+          items:
+            type: ["number", "null"]
+        equity:
+          type: array
+          items:
+            type: ["number", "null"]
+
+    RatioAnalysis:
+      type: object
+      properties:
+        years:
+          type: array
+          items:
+            type: string
+        currentRatio:
+          type: array
+          items:
+            type: ["number", "null"]
+        debtEquityRatio:
+          type: array
+          items:
+            type: ["number", "null"]
+        grossProfitMargin:
+          type: array
+          items:
+            type: ["number", "null"]
+        netProfitMargin:
+          type: array
+          items:
+            type: ["number", "null"]
+        returnOnEquity:
+          type: array
+          items:
+            type: ["number", "null"]
+        dscr:
+          type: array
+          items:
+            type: ["number", "null"]
+
+    CashFlow:
+      type: object
+      properties:
+        years:
+          type: array
+          items:
+            type: string
+        operatingCashFlow:
+          type: array
+          items:
+            type: ["number", "null"]
+        investingCashFlow:
+          type: array
+          items:
+            type: ["number", "null"]
+        financingCashFlow:
+          type: array
+          items:
+            type: ["number", "null"]
+        netCashFlow:
+          type: array
+          items:
+            type: ["number", "null"]
+
+    LoanSchedule:
+      type: object
+      properties:
+        termLoanAmount:
+          type: ["string", "null"]
+        interestRate:
+          type: ["string", "null"]
+        tenure:
+          type: ["string", "null"]
+        moratorium:
+          type: ["string", "null"]
+        schedule:
+          type: array
+          items:
+            $ref: "#/components/schemas/LoanScheduleRow"
+
+    LoanScheduleRow:
+      type: object
+      properties:
+        year:
+          type: ["string", "null"]
+        openingBalance:
+          type: ["number", "null"]
+        principal:
+          type: ["number", "null"]
+        interest:
+          type: ["number", "null"]
+        totalEmi:
+          type: ["number", "null"]
+        closingBalance:
+          type: ["number", "null"]
+
+    SwotAnalysis:
+      type: object
+      properties:
+        strengths:
+          type: array
+          items:
+            type: string
+        weaknesses:
+          type: array
+          items:
+            type: string
+        opportunities:
+          type: array
+          items:
+            type: string
+        threats:
+          type: array
+          items:
+            type: string
+
+    FinancialEvaluation:
+      type: object
+      properties:
+        irr:
+          type: ["string", "null"]
+        mirr:
+          type: ["string", "null"]
+        npv:
+          type: ["string", "null"]
+        wacc:
+          type: ["string", "null"]
+        profitabilityIndex:
+          type: ["string", "null"]
+        simplePaybackPeriod:
+          type: ["string", "null"]
+        discountedPaybackPeriod:
+          type: ["string", "null"]
+        bep:
+          type: ["string", "null"]
+        marginOfSafety:
+          type: ["string", "null"]
+        altmanZScore:
+          type: ["string", "null"]
+        averageDscr:
+          type: ["string", "null"]
+
+    EmploymentGeneration:
+      type: object
+      properties:
+        skilled:
+          type: ["integer", "null"]
+        semiSkilled:
+          type: ["integer", "null"]
+        unskilled:
+          type: ["integer", "null"]
+        totalDirect:
+          type: ["integer", "null"]
+        indirect:
+          type: ["integer", "null"]
+
+    ProjectCost:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProjectCostItem"
+        totalCost:
+          type: ["number", "null"]
+        financeBreakdown:
+          type: array
+          items:
+            $ref: "#/components/schemas/FinanceBreakdownItem"
+
+    ProjectCostItem:
+      type: object
+      properties:
+        label:
+          type: string
+        amount:
+          type: ["number", "null"]
+
+    FinanceBreakdownItem:
+      type: object
+      properties:
+        label:
+          type: string
+        amount:
+          type: ["number", "null"]
+        percentage:
+          type: ["number", "null"]
+
+    ExecutiveSummary:
+      type: object
+      required: [id, summary]
+      properties:
+        id:
+          type: integer
+        summary:
+          type: string
+        keyStrengths:
+          type: array
+          items:
+            type: string
+        riskFactors:
+          type: array
+          items:
+            type: string
+        viabilityVerdict:
+          type: ["string", "null"]
