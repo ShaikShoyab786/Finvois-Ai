@@ -225,3 +225,87 @@ ${dataStr}`,
     throw new Error(`AI returned invalid JSON: ${(err as Error).message}`);
   }
 }
+
+export interface SectionVerdictMap {
+  profile: string | null;
+  pl: string | null;
+  balanceSheet: string | null;
+  ratios: string | null;
+  cashFlow: string | null;
+  loan: string | null;
+  evaluation: string | null;
+}
+
+/**
+ * Generates a 1–2 sentence banker's verdict for each substantive section of
+ * the report in a single Claude call. Returned as a flat map keyed by section
+ * id; missing or unjudgeable sections come back as null so the UI can hide
+ * the verdict gracefully instead of showing a placeholder.
+ */
+export async function generateSectionVerdicts(
+  extractedData: Record<string, unknown>,
+): Promise<SectionVerdictMap> {
+  logger.info("Generating section verdicts");
+
+  const dataStr = JSON.stringify(extractedData, null, 2).slice(0, 20000);
+
+  const response = await client.messages.create({
+    model: "claude-sonnet-4-6",
+    max_tokens: 4096,
+    messages: [
+      {
+        role: "user",
+        content: `You are a senior credit analyst reviewing a DPR (Detailed Project Report) for a bank loan proposal.
+
+For each of the seven sections below, produce a SHORT verdict (1–2 sentences, ≤ 220 characters) capturing the banker's read of that section's evidence — what stands out, whether the data supports the loan, and any red flag. Be specific to the numbers in the data; never use generic phrasing. If a section is empty or unjudgeable, return null for that key.
+
+Tone: confident, evidence-grounded, no marketing fluff. Address what a credit committee would care about.
+
+Return ONLY this JSON shape:
+{
+  "profile": string|null,         // Business Profile — promoter quality, sector fit, location/scale
+  "pl": string|null,              // P&L Account — revenue trajectory, margin trend, profitability quality
+  "balanceSheet": string|null,    // Balance Sheet — capital structure, deleveraging, asset base
+  "ratios": string|null,          // Ratio Analysis — liquidity, leverage, return metrics vs benchmarks
+  "cashFlow": string|null,        // Cash Flow — operating cash quality, dependency on financing
+  "loan": string|null,            // Loan Schedule — EMI burden, coverage, repayment realism
+  "evaluation": string|null       // Financial Evaluation — IRR vs WACC, payback, Altman/DSCR risk signal
+}
+
+DPR DATA:
+${dataStr}`,
+      },
+    ],
+  });
+
+  const content = response.content[0];
+  if (content.type !== "text") {
+    throw new Error("Unexpected response type from AI");
+  }
+
+  const jsonText = extractJsonFromText(content.text);
+  let parsed: Partial<SectionVerdictMap>;
+  try {
+    parsed = JSON.parse(jsonText) as Partial<SectionVerdictMap>;
+  } catch (err) {
+    logger.error({ err, snippet: jsonText.slice(0, 500) }, "Failed to parse verdicts JSON");
+    throw new Error(`AI returned invalid JSON: ${(err as Error).message}`);
+  }
+
+  const normalize = (v: unknown): string | null => {
+    if (typeof v !== "string") return null;
+    const t = v.trim();
+    return t ? t : null;
+  };
+
+  logger.info("Section verdicts generated");
+  return {
+    profile: normalize(parsed.profile),
+    pl: normalize(parsed.pl),
+    balanceSheet: normalize(parsed.balanceSheet),
+    ratios: normalize(parsed.ratios),
+    cashFlow: normalize(parsed.cashFlow),
+    loan: normalize(parsed.loan),
+    evaluation: normalize(parsed.evaluation),
+  };
+}

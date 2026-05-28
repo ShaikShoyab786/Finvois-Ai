@@ -4,7 +4,7 @@ import multer from "multer";
 import pdfParse from "pdf-parse/lib/pdf-parse.js";
 import { db, reportsTable } from "@workspace/db";
 import { eq, desc } from "drizzle-orm";
-import { extractDprData, generateExecutiveSummary } from "../lib/extractDpr";
+import { extractDprData, generateExecutiveSummary, generateSectionVerdicts } from "../lib/extractDpr";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
@@ -241,6 +241,39 @@ router.get("/reports/:id/summary", async (req, res): Promise<void> => {
   } catch (err) {
     req.log.error({ err }, "Failed to generate executive summary");
     res.status(500).json({ error: "Failed to generate executive summary" });
+  }
+});
+
+router.get("/reports/:id/verdicts", async (req, res): Promise<void> => {
+  const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const id = parseInt(raw, 10);
+
+  if (isNaN(id)) {
+    res.status(400).json({ error: "Invalid report ID" });
+    return;
+  }
+
+  const [report] = await db
+    .select()
+    .from(reportsTable)
+    .where(eq(reportsTable.id, id));
+
+  if (!report) {
+    res.status(404).json({ error: "Report not found" });
+    return;
+  }
+
+  if (report.status !== "ready" || !report.extractedData) {
+    res.status(400).json({ error: "Report is not yet processed. Please wait for extraction to complete." });
+    return;
+  }
+
+  try {
+    const verdicts = await generateSectionVerdicts(report.extractedData as Record<string, unknown>);
+    res.json({ id, verdicts });
+  } catch (err) {
+    req.log.error({ err }, "Failed to generate section verdicts");
+    res.status(500).json({ error: "Failed to generate section verdicts" });
   }
 });
 

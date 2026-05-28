@@ -26,4 +26,6 @@ export * from './ratioAnalysis';
 export * from './report';
 export * from './reportSummary';
 export * from './reportUpload';
+export * from './sectionVerdicts';
+export * from './sectionVerdictsVerdicts';
 export * from './swotAnalysis';

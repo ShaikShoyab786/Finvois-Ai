@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useLocation, useParams } from "wouter";
-import { useGetReport, useGetReportSummary } from "@workspace/api-client-react";
+import { useGetReport, useGetReportSummary, useGetReportVerdicts } from "@workspace/api-client-react";
+import type { UseQueryOptions } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Loader2, FileText, User, MapPin, Phone, IdCard, Zap, CalendarDays, Briefcase, GraduationCap } from "lucide-react";
 import {
@@ -34,6 +35,8 @@ import { ProfitabilityWaterfall } from "@/components/report/ProfitabilityWaterfa
 import { WorkingCapitalChart } from "@/components/report/WorkingCapitalChart";
 import { CapitalStructureChart } from "@/components/report/CapitalStructureChart";
 import { DscrAmortizationChart } from "@/components/report/DscrAmortizationChart";
+import { SectionVerdict } from "@/components/report/SectionVerdict";
+import { ThresholdGauge, parseNumeric } from "@/components/report/ThresholdGauge";
 import {
   insightPL,
   insightBalanceSheet,
@@ -98,7 +101,19 @@ export default function Dashboard() {
   const [activeTab, setActiveTab] = useState("overview");
 
   const { data: report, isLoading, isError } = useGetReport(id);
-  const { data: summary, isLoading: isLoadingSummary } = useGetReportSummary(id);
+  // AI-generated summary + per-section verdicts each cost one paid LLM call
+  // (~15s each). Treat them as essentially static for the session — don't
+  // refetch on window focus or remount, since the underlying extracted data
+  // is immutable once the report is "ready". The orval-generated type marks
+  // queryKey as required even though the underlying queryOptions builder
+  // supplies it; we cast to allow partial overrides only.
+  const aiQuery = {
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
+  } as unknown as UseQueryOptions<unknown, unknown, unknown, readonly unknown[]>;
+  const { data: summary, isLoading: isLoadingSummary } = useGetReportSummary(id, { query: aiQuery as never });
+  const { data: verdictsData, isLoading: isLoadingVerdicts } = useGetReportVerdicts(id, { query: aiQuery as never });
+  const v = verdictsData?.verdicts;
 
   if (isLoading) {
     return (
@@ -234,28 +249,28 @@ export default function Dashboard() {
             )}
 
             {/* ═══════════ BUSINESS PROFILE (incl. Employment) ═══════════ */}
-            {activeTab === "profile" && <ProfileSection report={report} ed={ed} />}
+            {activeTab === "profile" && <ProfileSection report={report} ed={ed} verdict={v?.profile} isLoadingVerdict={isLoadingVerdicts} />}
 
             {/* ═══════════ FINANCIAL DASHBOARD — synthesis hub ═══════════ */}
             {activeTab === "dashboard" && <FinancialDashboardSection ed={ed} onJump={setActiveTab} />}
 
             {/* ═══════════ P&L ═══════════ */}
-            {activeTab === "pl" && <PLSection ed={ed} />}
+            {activeTab === "pl" && <PLSection ed={ed} verdict={v?.pl} isLoadingVerdict={isLoadingVerdicts} />}
 
             {/* ═══════════ BALANCE SHEET ═══════════ */}
-            {activeTab === "bs" && <BalanceSheetSection ed={ed} />}
+            {activeTab === "bs" && <BalanceSheetSection ed={ed} verdict={v?.balanceSheet} isLoadingVerdict={isLoadingVerdicts} />}
 
             {/* ═══════════ RATIOS ═══════════ */}
-            {activeTab === "ratios" && <RatiosSection ed={ed} />}
+            {activeTab === "ratios" && <RatiosSection ed={ed} verdict={v?.ratios} isLoadingVerdict={isLoadingVerdicts} />}
 
             {/* ═══════════ CASH FLOW ═══════════ */}
-            {activeTab === "cashflow" && <CashFlowSection ed={ed} />}
+            {activeTab === "cashflow" && <CashFlowSection ed={ed} verdict={v?.cashFlow} isLoadingVerdict={isLoadingVerdicts} />}
 
             {/* ═══════════ LOAN SCHEDULE ═══════════ */}
-            {activeTab === "loan" && <LoanSection ed={ed} />}
+            {activeTab === "loan" && <LoanSection ed={ed} verdict={v?.loan} isLoadingVerdict={isLoadingVerdicts} />}
 
             {/* ═══════════ FINANCIAL EVALUATION (incl. SWOT) ═══════════ */}
-            {activeTab === "eval" && <EvaluationSection ed={ed} />}
+            {activeTab === "eval" && <EvaluationSection ed={ed} verdict={v?.evaluation} isLoadingVerdict={isLoadingVerdicts} />}
           </div>
         </main>
       </div>
@@ -267,7 +282,7 @@ export default function Dashboard() {
 // SECTION COMPONENTS
 // ═════════════════════════════════════════════════════════
 
-function ProfileSection({ report, ed }: { report: any; ed: any }) {
+function ProfileSection({ report, ed, verdict, isLoadingVerdict }: { report: any; ed: any; verdict?: string | null; isLoadingVerdict?: boolean }) {
   const bp = ed?.businessProfile;
   const proprietorName = bp?.proprietorName || report.proprietorName || "—";
   const initials = proprietorName
@@ -301,6 +316,7 @@ function ProfileSection({ report, ed }: { report: any; ed: any }) {
   return (
     <SectionPage>
       <PageHeader eyebrow="The Business" title="Business Profile" description="Identity, leadership and operational footprint of the firm." />
+      <SectionVerdict verdict={verdict} isLoading={isLoadingVerdict} />
 
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
         {/* Firm card (60%) */}
@@ -401,11 +417,12 @@ function CostRow({ label, amount, max }: { label: string; amount: number | null;
   );
 }
 
-function PLSection({ ed }: { ed: any }) {
+function PLSection({ ed, verdict, isLoadingVerdict }: { ed: any; verdict?: string | null; isLoadingVerdict?: boolean }) {
   const pl = ed?.plAccount;
   if (!pl?.years?.length) return (
     <SectionPage>
       <PageHeader eyebrow="Financials" title="P&L Account" />
+      <SectionVerdict verdict={verdict} isLoading={isLoadingVerdict} />
       <EmptyState />
     </SectionPage>
   );
@@ -422,6 +439,7 @@ function PLSection({ ed }: { ed: any }) {
   return (
     <SectionPage>
       <PageHeader eyebrow="Financials" title="P&L Account" description="Revenue trajectory and profitability across the projection window." />
+      <SectionVerdict verdict={verdict} isLoading={isLoadingVerdict} />
 
       {/* Latest year KPI strip */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
@@ -512,11 +530,12 @@ function PLSection({ ed }: { ed: any }) {
   );
 }
 
-function BalanceSheetSection({ ed }: { ed: any }) {
+function BalanceSheetSection({ ed, verdict, isLoadingVerdict }: { ed: any; verdict?: string | null; isLoadingVerdict?: boolean }) {
   const bs = ed?.balanceSheet;
   if (!bs?.years?.length) return (
     <SectionPage>
       <PageHeader eyebrow="Financials" title="Balance Sheet" />
+      <SectionVerdict verdict={verdict} isLoading={isLoadingVerdict} />
       <EmptyState />
     </SectionPage>
   );
@@ -534,6 +553,7 @@ function BalanceSheetSection({ ed }: { ed: any }) {
   return (
     <SectionPage>
       <PageHeader eyebrow="Financials" title="Balance Sheet" description="Assets above, liabilities and equity below — the project's capital structure over time." />
+      <SectionVerdict verdict={verdict} isLoading={isLoadingVerdict} />
 
       <ChartFrame
         eyebrow="Capital Structure"
@@ -598,11 +618,12 @@ function BalanceSheetSection({ ed }: { ed: any }) {
   );
 }
 
-function CashFlowSection({ ed }: { ed: any }) {
+function CashFlowSection({ ed, verdict, isLoadingVerdict }: { ed: any; verdict?: string | null; isLoadingVerdict?: boolean }) {
   const cf = ed?.cashFlow;
   if (!cf?.years?.length) return (
     <SectionPage>
       <PageHeader eyebrow="Financials" title="Cash Flow" />
+      <SectionVerdict verdict={verdict} isLoading={isLoadingVerdict} />
       <EmptyState />
     </SectionPage>
   );
@@ -619,6 +640,7 @@ function CashFlowSection({ ed }: { ed: any }) {
   return (
     <SectionPage>
       <PageHeader eyebrow="Financials" title="Cash Flow" description="Operating, investing, financing — and the net resulting cash movement." />
+      <SectionVerdict verdict={verdict} isLoading={isLoadingVerdict} />
 
       <ChartFrame
         eyebrow="Cash Movement"
@@ -657,11 +679,12 @@ function CashFlowSection({ ed }: { ed: any }) {
   );
 }
 
-function RatiosSection({ ed }: { ed: any }) {
+function RatiosSection({ ed, verdict, isLoadingVerdict }: { ed: any; verdict?: string | null; isLoadingVerdict?: boolean }) {
   const ra = ed?.ratioAnalysis;
   if (!ra?.years?.length) return (
     <SectionPage>
       <PageHeader eyebrow="Quality" title="Ratio Analysis" />
+      <SectionVerdict verdict={verdict} isLoading={isLoadingVerdict} />
       <EmptyState />
     </SectionPage>
   );
@@ -680,6 +703,7 @@ function RatiosSection({ ed }: { ed: any }) {
   return (
     <SectionPage>
       <PageHeader eyebrow="Quality" title="Ratio Analysis" description="Key financial health indicators projected across the loan window." />
+      <SectionVerdict verdict={verdict} isLoading={isLoadingVerdict} />
 
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5 mb-6">
         {ratios.map(({ key, ...r }) => (
@@ -747,7 +771,89 @@ function RatioMiniCard({ label, values, years, color, benchmark, benchmarkLabel,
   );
 }
 
-function EvaluationSection({ ed }: { ed: any }) {
+/**
+ * Three banker-grade threshold gauges for the Financial Evaluation section.
+ * Each gauge shows whether a single headline metric clears the bar that a
+ * credit committee actually uses — not just whether the number exists.
+ *
+ * The IRR gauge floats its bands around the project's own WACC when
+ * available (IRR must exceed WACC to create value); otherwise it falls
+ * back to conventional MSME thresholds. Renders nothing when no
+ * threshold metric is parseable.
+ */
+function ThresholdGaugesBlock({ fe }: { fe: any }) {
+  if (!fe) return null;
+  const irr = parseNumeric(fe.irr);
+  const wacc = parseNumeric(fe.wacc);
+  const altman = parseNumeric(fe.altmanZScore);
+  const dscr = parseNumeric(fe.averageDscr);
+
+  if (irr == null && altman == null && dscr == null) return null;
+
+  // IRR bands: must beat WACC to create value, comfort margin is ~5pp above
+  const irrFloor = wacc ?? 12;
+  const irrComfort = irrFloor + 5;
+  const irrMax = Math.max(30, Math.ceil((irr ?? 0) + 5), irrComfort + 5);
+
+  return (
+    <div className="mb-9">
+      <div className="text-eyebrow text-gold mb-4">Does it clear the bar?</div>
+      <h3 className="font-display text-[22px] mb-5">Threshold Gauges</h3>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {irr != null && (
+          <ThresholdGauge
+            label="IRR vs WACC"
+            value={irr}
+            suffix="%"
+            min={0}
+            max={irrMax}
+            bands={[
+              { to: irrFloor, bg: "bg-rose-200/70", label: "WACC" },
+              { to: irrComfort, bg: "bg-amber-200/70", label: `+5pp` },
+              { to: irrMax, bg: "bg-emerald-200/70" },
+            ]}
+            benchmarkLabel={
+              wacc != null
+                ? `IRR must exceed WACC (${wacc.toFixed(1)}%) to create value; +5pp gives margin for execution risk.`
+                : `WACC not stated; using 12% as conventional MSME floor.`
+            }
+          />
+        )}
+        {altman != null && (
+          <ThresholdGauge
+            label="Altman Z-Score"
+            value={altman}
+            min={0}
+            max={5}
+            bands={[
+              { to: 1.8, bg: "bg-rose-200/70", label: "1.8" },
+              { to: 3.0, bg: "bg-amber-200/70", label: "3.0" },
+              { to: 5, bg: "bg-emerald-200/70" },
+            ]}
+            benchmarkLabel="Below 1.8 signals distress; 1.8–3.0 is grey zone; above 3.0 is safe."
+          />
+        )}
+        {dscr != null && (
+          <ThresholdGauge
+            label="Average DSCR"
+            value={dscr}
+            suffix="×"
+            min={0}
+            max={3}
+            bands={[
+              { to: 1.0, bg: "bg-rose-200/70", label: "1.0×" },
+              { to: 1.5, bg: "bg-amber-200/70", label: "1.5×" },
+              { to: 3, bg: "bg-emerald-200/70" },
+            ]}
+            benchmarkLabel="Below 1.0× cannot service debt; 1.0–1.5× is tight; 1.5×+ is what most banks underwrite to."
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function EvaluationSection({ ed, verdict, isLoadingVerdict }: { ed: any; verdict?: string | null; isLoadingVerdict?: boolean }) {
   const fe = ed?.financialEvaluation;
   const sw = ed?.swotAnalysis;
   // Render if EITHER quantitative or qualitative evidence exists —
@@ -755,6 +861,7 @@ function EvaluationSection({ ed }: { ed: any }) {
   if (!fe && !sw) return (
     <SectionPage>
       <PageHeader eyebrow="Quality" title="Financial Evaluation" />
+      <SectionVerdict verdict={verdict} isLoading={isLoadingVerdict} />
       <EmptyState />
     </SectionPage>
   );
@@ -794,6 +901,10 @@ function EvaluationSection({ ed }: { ed: any }) {
   return (
     <SectionPage>
       <PageHeader eyebrow="Quality" title="Financial Evaluation" description="Returns, payback and risk metrics determining whether this project clears the bar." />
+      <SectionVerdict verdict={verdict} isLoading={isLoadingVerdict} />
+
+      {/* Threshold gauges — does the project clear the bar that banks actually use? */}
+      <ThresholdGaugesBlock fe={fe} />
 
       <div className="space-y-9">
         {groups.map((g) => {
@@ -878,11 +989,12 @@ function SwotQuad({ title, items, tone, sub }: { title: string; items?: string[]
   );
 }
 
-function LoanSection({ ed }: { ed: any }) {
+function LoanSection({ ed, verdict, isLoadingVerdict }: { ed: any; verdict?: string | null; isLoadingVerdict?: boolean }) {
   const loan = ed?.loanSchedule;
   if (!loan?.schedule?.length) return (
     <SectionPage>
       <PageHeader eyebrow="Operations" title="Loan Schedule" />
+      <SectionVerdict verdict={verdict} isLoading={isLoadingVerdict} />
       <EmptyState />
     </SectionPage>
   );
@@ -898,6 +1010,7 @@ function LoanSection({ ed }: { ed: any }) {
   return (
     <SectionPage>
       <PageHeader eyebrow="Operations" title="Loan Schedule" description="Amortization plan — principal repayment, interest burden, and outstanding balance over time." />
+      <SectionVerdict verdict={verdict} isLoading={isLoadingVerdict} />
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <KpiTile label="Term Loan" value={loan.termLoanAmount} variant="card" />

@@ -243,3 +243,25 @@ export interface ExecutiveSummary {
   viabilityVerdict?: string | null;
 }
 
+export type SectionVerdictsVerdicts = {
+  /** @nullable */
+  profile?: string | null;
+  /** @nullable */
+  pl?: string | null;
+  /** @nullable */
+  balanceSheet?: string | null;
+  /** @nullable */
+  ratios?: string | null;
+  /** @nullable */
+  cashFlow?: string | null;
+  /** @nullable */
+  loan?: string | null;
+  /** @nullable */
+  evaluation?: string | null;
+};
+
+export interface SectionVerdicts {
+  id: number;
+  verdicts: SectionVerdictsVerdicts;
+}
+

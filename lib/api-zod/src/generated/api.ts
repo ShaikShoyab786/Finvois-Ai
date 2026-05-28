@@ -194,3 +194,24 @@ export const GetReportSummaryResponse = zod.object({
 })
 
 
+/**
+ * @summary Get AI-generated per-section verdicts for a report
+ */
+export const GetReportVerdictsParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetReportVerdictsResponse = zod.object({
+  "id": zod.number(),
+  "verdicts": zod.object({
+  "profile": zod.string().nullish(),
+  "pl": zod.string().nullish(),
+  "balanceSheet": zod.string().nullish(),
+  "ratios": zod.string().nullish(),
+  "cashFlow": zod.string().nullish(),
+  "loan": zod.string().nullish(),
+  "evaluation": zod.string().nullish()
+})
+})
+
+

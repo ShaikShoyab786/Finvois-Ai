@@ -25,7 +25,8 @@ import type {
   HealthStatus,
   Report,
   ReportSummary,
-  ReportUpload
+  ReportUpload,
+  SectionVerdicts
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -480,6 +481,83 @@ export function useGetReportSummary<TData = Awaited<ReturnType<typeof getReportS
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetReportSummaryQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getGetReportVerdictsUrl = (id: number,) => {
+
+
+
+
+  return `/api/reports/${id}/verdicts`
+}
+
+/**
+ * @summary Get AI-generated per-section verdicts for a report
+ */
+export const getReportVerdicts = async (id: number, options?: RequestInit): Promise<SectionVerdicts> => {
+
+  return customFetch<SectionVerdicts>(getGetReportVerdictsUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetReportVerdictsQueryKey = (id: number,) => {
+    return [
+    `/api/reports/${id}/verdicts`
+    ] as const;
+    }
+
+
+export const getGetReportVerdictsQueryOptions = <TData = Awaited<ReturnType<typeof getReportVerdicts>>, TError = ErrorType<ErrorResponse>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getReportVerdicts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetReportVerdictsQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getReportVerdicts>>> = ({ signal }) => getReportVerdicts(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(id), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getReportVerdicts>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetReportVerdictsQueryResult = NonNullable<Awaited<ReturnType<typeof getReportVerdicts>>>
+export type GetReportVerdictsQueryError = ErrorType<ErrorResponse>
+
+
+/**
+ * @summary Get AI-generated per-section verdicts for a report
+ */
+
+export function useGetReportVerdicts<TData = Awaited<ReturnType<typeof getReportVerdicts>>, TError = ErrorType<ErrorResponse>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getReportVerdicts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetReportVerdictsQueryOptions(id,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
