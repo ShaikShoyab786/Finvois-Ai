@@ -260,3 +260,88 @@ export function insightFinancialSnapshot(ed: any): string | null {
   if (!parts.length) return null;
   return parts.join(", ") + ".";
 }
+
+// ─── Relationship-visualization insights (Phase 3b) ─────
+
+/** Where does each rupee of revenue go? */
+export function insightWaterfall(pl: any): string | null {
+  if (!pl?.revenue?.length) return null;
+  const i = pl.revenue.length - 1;
+  const r = pl.revenue[i];
+  const gp = pl.grossProfit?.[i];
+  const np = pl.netProfit?.[i];
+  if (typeof r !== "number" || r === 0 || typeof np !== "number") return null;
+  const netPct = (np / r) * 100;
+  const parts: string[] = [];
+  if (typeof gp === "number") {
+    const grossPct = (gp / r) * 100;
+    parts.push(`${grossPct.toFixed(0)}% of revenue survives direct costs`);
+    parts.push(`but only ${netPct.toFixed(0)}% reaches the bottom line`);
+    const absorbed = grossPct - netPct;
+    if (absorbed > 0) {
+      parts.push(`operating costs, depreciation and interest absorb ${absorbed.toFixed(0)} percentage points along the way`);
+    }
+  } else {
+    parts.push(`${netPct.toFixed(0)}% of revenue reaches the bottom line`);
+  }
+  return parts.join(", ") + ".";
+}
+
+/** Short-term solvency reading from current assets and liabilities. */
+export function insightWorkingCapital(bs: any): string | null {
+  if (!bs?.years?.length) return null;
+  const i = bs.years.length - 1;
+  const ca = bs.currentAssets?.[i];
+  const cl = bs.currentLiabilities?.[i];
+  if (typeof ca !== "number" || typeof cl !== "number" || cl === 0) return null;
+  const wc = ca - cl;
+  const ratio = ca / cl;
+  const wcStr = `₹${wc.toFixed(2)}L`;
+  const rStr = `${ratio.toFixed(2)}×`;
+  if (ratio >= 2) return `Working capital cushion of ${wcStr} (current ratio ${rStr}) — comfortably solvent short-term.`;
+  if (ratio >= 1.33) return `Working capital of ${wcStr} (current ratio ${rStr}) — healthy short-term liquidity.`;
+  if (ratio >= 1) return `Thin working capital of ${wcStr} (current ratio ${rStr}) — obligations covered but with little buffer.`;
+  return `Negative working capital of ${wcStr} (current ratio ${rStr}) — short-term liabilities exceed current assets.`;
+}
+
+/** Does the funding mix shift toward equity (deleveraging) over time? */
+export function insightCapitalStructure(bs: any): string | null {
+  if (!bs?.years?.length || bs.years.length < 2) return null;
+  const calc = (i: number) => {
+    const e = bs.equity?.[i];
+    const ltl = bs.longTermLiabilities?.[i];
+    const cl = bs.currentLiabilities?.[i];
+    const eq = typeof e === "number" ? e : 0;
+    const lt = typeof ltl === "number" ? ltl : 0;
+    const ct = typeof cl === "number" ? cl : 0;
+    const total = eq + lt + ct;
+    if (total === 0) return null;
+    return { equityPct: (eq / total) * 100, debtPct: ((lt + ct) / total) * 100 };
+  };
+  const first = calc(0);
+  const last = calc(bs.years.length - 1);
+  if (!first || !last) return null;
+  const shift = last.equityPct - first.equityPct;
+  if (shift > 5)
+    return `Equity share rises from ${first.equityPct.toFixed(0)}% to ${last.equityPct.toFixed(0)}% — the project deleverages as debt is repaid.`;
+  if (shift < -5)
+    return `Equity share falls from ${first.equityPct.toFixed(0)}% to ${last.equityPct.toFixed(0)}% — leverage increases over the projection window.`;
+  return `Capital mix stays broadly stable: equity ${last.equityPct.toFixed(0)}%, debt ${last.debtPct.toFixed(0)}%.`;
+}
+
+/** Will operating cash cover EMI in every year of the loan tenure? */
+export function insightDscrAmortization(_loan: any, _cf: any, ra: any): string | null {
+  const dscr = ra?.dscr;
+  if (!Array.isArray(dscr) || !dscr.length) return null;
+  const valid = dscr.filter((v: any) => typeof v === "number" && isFinite(v)) as number[];
+  if (!valid.length) return null;
+  const min = Math.min(...valid);
+  const avg = valid.reduce((a, b) => a + b, 0) / valid.length;
+  if (min >= 1.5)
+    return `DSCR never dips below ${min.toFixed(2)}× and averages ${avg.toFixed(2)}× — operating cash comfortably covers EMI throughout the tenure.`;
+  if (min >= 1.2)
+    return `DSCR averages ${avg.toFixed(2)}× with a low point of ${min.toFixed(2)}× — coverage meets the 1.2× banking minimum in every year.`;
+  if (min >= 1)
+    return `DSCR averages ${avg.toFixed(2)}× but dips to ${min.toFixed(2)}× — coverage gets thin in at least one year of the tenure.`;
+  return `DSCR falls to ${min.toFixed(2)}× in at least one year — operating cash is insufficient to service debt without external support.`;
+}

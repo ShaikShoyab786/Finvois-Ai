@@ -30,6 +30,10 @@ import { InsightCaption } from "@/components/report/InsightCaption";
 import { ChartFrame } from "@/components/report/ChartFrame";
 import { MetricCard } from "@/components/report/MetricCard";
 import { DataTable } from "@/components/report/DataTable";
+import { ProfitabilityWaterfall } from "@/components/report/ProfitabilityWaterfall";
+import { WorkingCapitalChart } from "@/components/report/WorkingCapitalChart";
+import { CapitalStructureChart } from "@/components/report/CapitalStructureChart";
+import { DscrAmortizationChart } from "@/components/report/DscrAmortizationChart";
 import {
   insightPL,
   insightBalanceSheet,
@@ -39,6 +43,10 @@ import {
   plLatestMetrics,
   meanFinite,
   insightFinancialSnapshot,
+  insightWaterfall,
+  insightWorkingCapital,
+  insightCapitalStructure,
+  insightDscrAmortization,
 } from "@/lib/insights";
 import { ArrowRight } from "lucide-react";
 
@@ -439,6 +447,19 @@ function PLSection({ ed }: { ed: any }) {
         />
       </div>
 
+      {/* Layer 2a — relationship view: where does the latest rupee go? */}
+      <ChartFrame
+        eyebrow="Where The Rupee Goes"
+        title={`Profitability waterfall · ${pl.years[pl.years.length - 1]}`}
+        description="Latest-year flow from top-line revenue down to net profit — each deduction shown as a step."
+        chartHeight={340}
+        footer={<InsightCaption text={insightWaterfall(pl)} />}
+      >
+        <ProfitabilityWaterfall pl={pl} />
+      </ChartFrame>
+
+      <div className="h-6" />
+
       <ChartFrame
         eyebrow="Revenue & Profitability"
         title="Earnings trajectory"
@@ -535,6 +556,30 @@ function BalanceSheetSection({ ed }: { ed: any }) {
             <Bar dataKey="Equity" stackId="b" fill={GOLD} radius={[0, 0, 4, 4]} maxBarSize={36} />
           </BarChart>
         </ResponsiveContainer>
+      </ChartFrame>
+
+      {/* Layer 2b — short-term solvency: working capital position */}
+      <div className="h-6" />
+      <ChartFrame
+        eyebrow="Short-Term Health"
+        title="Working capital position"
+        description="Current assets vs current liabilities each year; the line traces the resulting working capital."
+        chartHeight={320}
+        footer={<InsightCaption text={insightWorkingCapital(bs)} />}
+      >
+        <WorkingCapitalChart bs={bs} />
+      </ChartFrame>
+
+      {/* Layer 2c — long-term health: capital structure mix evolution */}
+      <div className="h-6" />
+      <ChartFrame
+        eyebrow="Long-Term Health"
+        title="Capital structure evolution"
+        description="Funding mix as a percentage — does the project deleverage as debt is paid down?"
+        chartHeight={320}
+        footer={<InsightCaption text={insightCapitalStructure(bs)} />}
+      >
+        <CapitalStructureChart bs={bs} />
       </ChartFrame>
 
       <div className="mt-6">
@@ -881,6 +926,18 @@ function LoanSection({ ed }: { ed: any }) {
             <Line yAxisId="right" type="monotone" dataKey="Closing Balance" stroke={ROSE} strokeWidth={2.5} dot={{ r: 3, fill: ROSE }} />
           </ComposedChart>
         </ResponsiveContainer>
+      </ChartFrame>
+
+      {/* Layer 2b — the banker's coverage view: does operating cash service the EMI? */}
+      <div className="h-6" />
+      <ChartFrame
+        eyebrow="Coverage Check"
+        title="Operating cash vs EMI · with DSCR overlay"
+        description="EMI burden (bars) against operating cash available (line), with the DSCR ratio overlaid on the right axis and the 1.2× banking floor as a reference."
+        chartHeight={360}
+        footer={<InsightCaption text={insightDscrAmortization(loan, ed?.cashFlow, ed?.ratioAnalysis)} />}
+      >
+        <DscrAmortizationChart loan={loan} cf={ed?.cashFlow} ra={ed?.ratioAnalysis} />
       </ChartFrame>
 
       <div className="mt-6 surface-card rounded-2xl overflow-hidden">
