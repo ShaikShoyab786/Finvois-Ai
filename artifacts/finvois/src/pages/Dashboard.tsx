@@ -38,41 +38,28 @@ import {
   insightLoan,
   plLatestMetrics,
   meanFinite,
+  insightFinancialSnapshot,
 } from "@/lib/insights";
+import { ArrowRight } from "lucide-react";
 
 const fmtRupeesL = (n: number): string => `₹${n.toFixed(2)}L`;
 
 // ─── Navigation structure ────────────────────────────────
+// Flat, finance-industry-familiar labels. Storytelling depth lives
+// inside each section, not in nav abstraction.
 const NAV: NavSection[] = [
-  { group: "Overview", items: [{ id: "overview", label: "Briefing" }] },
   {
-    group: "The Business",
+    group: "",
     items: [
+      { id: "overview", label: "Executive Summary" },
       { id: "profile", label: "Business Profile" },
-      { id: "summary", label: "Executive Summary" },
-    ],
-  },
-  {
-    group: "Financials",
-    items: [
+      { id: "dashboard", label: "Financial Dashboard" },
       { id: "pl", label: "P&L Account" },
       { id: "bs", label: "Balance Sheet" },
-      { id: "cashflow", label: "Cash Flow" },
-    ],
-  },
-  {
-    group: "Quality",
-    items: [
       { id: "ratios", label: "Ratio Analysis" },
-      { id: "eval", label: "Financial Evaluation" },
-      { id: "swot", label: "SWOT Analysis" },
-    ],
-  },
-  {
-    group: "Operations",
-    items: [
+      { id: "cashflow", label: "Cash Flow" },
       { id: "loan", label: "Loan Schedule" },
-      { id: "employment", label: "Employment" },
+      { id: "eval", label: "Financial Evaluation" },
     ],
   },
 ];
@@ -238,34 +225,11 @@ export default function Dashboard() {
               </motion.div>
             )}
 
-            {/* ═══════════ BUSINESS PROFILE ═══════════ */}
+            {/* ═══════════ BUSINESS PROFILE (incl. Employment) ═══════════ */}
             {activeTab === "profile" && <ProfileSection report={report} ed={ed} />}
 
-            {/* ═══════════ EXECUTIVE SUMMARY ═══════════ */}
-            {activeTab === "summary" && (
-              <SectionPage>
-                <PageHeader eyebrow="The Bottom Line" title="Executive Summary" description="AI-generated investor briefing distilling the project's viability." />
-                {isLoadingSummary ? (
-                  <div className="surface-card rounded-2xl p-12 text-center text-muted-foreground">
-                    <Loader2 className="w-6 h-6 animate-spin mx-auto mb-3" />
-                    Generating summary…
-                  </div>
-                ) : summary ? (
-                  <div className="space-y-6">
-                    <div className="surface-card rounded-2xl p-10">
-                      <div className="text-eyebrow text-gold mb-3">Overview</div>
-                      <p className="text-[16px] leading-[1.75] text-foreground/85">{summary.summary}</p>
-                    </div>
-                    <div className="grid md:grid-cols-2 gap-6">
-                      <ListCard tone="emerald" label="Key Strengths" items={summary.keyStrengths} />
-                      <ListCard tone="amber" label="Risk Factors" items={summary.riskFactors} />
-                    </div>
-                  </div>
-                ) : (
-                  <EmptyState />
-                )}
-              </SectionPage>
-            )}
+            {/* ═══════════ FINANCIAL DASHBOARD — synthesis hub ═══════════ */}
+            {activeTab === "dashboard" && <FinancialDashboardSection ed={ed} onJump={setActiveTab} />}
 
             {/* ═══════════ P&L ═══════════ */}
             {activeTab === "pl" && <PLSection ed={ed} />}
@@ -273,23 +237,17 @@ export default function Dashboard() {
             {/* ═══════════ BALANCE SHEET ═══════════ */}
             {activeTab === "bs" && <BalanceSheetSection ed={ed} />}
 
-            {/* ═══════════ CASH FLOW ═══════════ */}
-            {activeTab === "cashflow" && <CashFlowSection ed={ed} />}
-
             {/* ═══════════ RATIOS ═══════════ */}
             {activeTab === "ratios" && <RatiosSection ed={ed} />}
 
-            {/* ═══════════ FINANCIAL EVALUATION ═══════════ */}
-            {activeTab === "eval" && <EvaluationSection ed={ed} />}
-
-            {/* ═══════════ SWOT ═══════════ */}
-            {activeTab === "swot" && <SwotSection ed={ed} />}
+            {/* ═══════════ CASH FLOW ═══════════ */}
+            {activeTab === "cashflow" && <CashFlowSection ed={ed} />}
 
             {/* ═══════════ LOAN SCHEDULE ═══════════ */}
             {activeTab === "loan" && <LoanSection ed={ed} />}
 
-            {/* ═══════════ EMPLOYMENT ═══════════ */}
-            {activeTab === "employment" && <EmploymentSection ed={ed} />}
+            {/* ═══════════ FINANCIAL EVALUATION (incl. SWOT) ═══════════ */}
+            {activeTab === "eval" && <EvaluationSection ed={ed} />}
           </div>
         </main>
       </div>
@@ -391,24 +349,31 @@ function ProfileSection({ report, ed }: { report: any; ed: any }) {
 
       {/* Project cost items, if available */}
       {ed?.projectCost?.items && ed.projectCost.items.length > 0 && (
-        <div className="mt-8 surface-card rounded-2xl p-8">
+        <div className="mt-10">
           <div className="text-eyebrow text-gold mb-3">Cost Composition</div>
           <h3 className="font-display text-[22px] mb-5">Project Cost Components</h3>
-          <div className="space-y-2.5">
-            {ed.projectCost.items.map((it: any, i: number) => (
-              <CostRow key={i} label={it.label} amount={it.amount} max={Math.max(...ed.projectCost.items.map((x: any) => x.amount || 0))} />
-            ))}
-            {ed.projectCost.totalCost && (
-              <div className="flex justify-between items-center pt-4 mt-2 border-t border-border">
-                <div className="text-eyebrow text-foreground">Total</div>
-                <div className="font-display text-[20px] text-foreground num-tabular">
-                  ₹{ed.projectCost.totalCost.toLocaleString("en-IN")}
+          <div className="surface-card rounded-2xl p-8">
+            <div className="space-y-2.5">
+              {ed.projectCost.items.map((it: any, i: number) => (
+                <CostRow key={i} label={it.label} amount={it.amount} max={Math.max(...ed.projectCost.items.map((x: any) => x.amount || 0))} />
+              ))}
+              {ed.projectCost.totalCost && (
+                <div className="flex justify-between items-center pt-4 mt-2 border-t border-border">
+                  <div className="text-eyebrow text-foreground">Total</div>
+                  <div className="font-display text-[20px] text-foreground num-tabular">
+                    ₹{ed.projectCost.totalCost.toLocaleString("en-IN")}
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         </div>
       )}
+
+      {/* Employment — folded in as the operational footprint of the firm */}
+      <div className="mt-10">
+        <EmploymentBlock ed={ed} />
+      </div>
     </SectionPage>
   );
 }
@@ -739,14 +704,17 @@ function RatioMiniCard({ label, values, years, color, benchmark, benchmarkLabel,
 
 function EvaluationSection({ ed }: { ed: any }) {
   const fe = ed?.financialEvaluation;
-  if (!fe) return (
+  const sw = ed?.swotAnalysis;
+  // Render if EITHER quantitative or qualitative evidence exists —
+  // SWOT must remain reachable even when financialEvaluation is missing.
+  if (!fe && !sw) return (
     <SectionPage>
       <PageHeader eyebrow="Quality" title="Financial Evaluation" />
       <EmptyState />
     </SectionPage>
   );
 
-  const groups = [
+  const groups = fe ? [
     {
       title: "Capital Returns",
       eyebrow: "Returns",
@@ -776,7 +744,7 @@ function EvaluationSection({ ed }: { ed: any }) {
         { label: "Average DSCR", value: fe.averageDscr, description: "Debt service coverage" },
       ],
     },
-  ];
+  ] : [];
 
   return (
     <SectionPage>
@@ -798,35 +766,38 @@ function EvaluationSection({ ed }: { ed: any }) {
             </div>
           );
         })}
+
+        {/* SWOT — folded in as the qualitative companion to the quantitative verdict */}
+        <SwotBlock ed={ed} />
       </div>
     </SectionPage>
   );
 }
 
-function SwotSection({ ed }: { ed: any }) {
+// Sub-block rendered inside Financial Evaluation as the qualitative
+// companion to the quantitative verdict. Not a standalone section.
+function SwotBlock({ ed }: { ed: any }) {
   const sw = ed?.swotAnalysis;
-  if (!sw) return (
-    <SectionPage>
-      <PageHeader eyebrow="Quality" title="SWOT Analysis" />
-      <EmptyState />
-    </SectionPage>
-  );
+  if (!sw) return null;
   const quads = [
     { title: "Strengths", items: sw.strengths, tone: "emerald" as const, sub: "Internal · Positive" },
     { title: "Weaknesses", items: sw.weaknesses, tone: "rose" as const, sub: "Internal · Negative" },
     { title: "Opportunities", items: sw.opportunities, tone: "sky" as const, sub: "External · Positive" },
     { title: "Threats", items: sw.threats, tone: "amber" as const, sub: "External · Negative" },
   ];
-
   return (
-    <SectionPage>
-      <PageHeader eyebrow="Quality" title="SWOT Analysis" description="Strategic position — internal capabilities mapped against external forces." />
+    <div>
+      <div className="text-eyebrow text-gold mb-4">Qualitative Verdict</div>
+      <h3 className="font-display text-[22px] mb-2">SWOT Analysis</h3>
+      <p className="text-[13.5px] text-muted-foreground mb-5 max-w-2xl">
+        The qualitative companion to the financial evaluation — internal capabilities mapped against external forces.
+      </p>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
         {quads.map((q) => (
           <SwotQuad key={q.title} {...q} />
         ))}
       </div>
-    </SectionPage>
+    </div>
   );
 }
 
@@ -944,14 +915,11 @@ function LoanSection({ ed }: { ed: any }) {
   );
 }
 
-function EmploymentSection({ ed }: { ed: any }) {
+// Sub-block rendered inside Business Profile — operational footprint
+// (jobs created) as a descriptor of the firm, not a separate section.
+function EmploymentBlock({ ed }: { ed: any }) {
   const emp = ed?.employmentGeneration;
-  if (!emp) return (
-    <SectionPage>
-      <PageHeader eyebrow="Operations" title="Employment Generation" />
-      <EmptyState />
-    </SectionPage>
-  );
+  if (!emp) return null;
 
   const total = (emp.totalDirect || 0) + (emp.indirect || 0);
   const segments = [
@@ -962,21 +930,24 @@ function EmploymentSection({ ed }: { ed: any }) {
   ].filter((s) => s.value > 0);
   const segmentTotal = segments.reduce((a, b) => a + b.value, 0) || 1;
 
+  if (total === 0 && segments.length === 0) return null;
+
   return (
-    <SectionPage>
-      <PageHeader eyebrow="Operations" title="Employment Generation" description="Direct and indirect jobs created by the project." />
-
-      <div className="surface-card rounded-2xl p-10 mb-6 text-center">
-        <div className="text-eyebrow text-gold mb-3">Total Jobs Created</div>
-        <div className="font-display text-[72px] leading-none text-foreground num-tabular">{total || "—"}</div>
-        <div className="text-[13px] text-muted-foreground mt-3">
-          {emp.totalDirect ? `${emp.totalDirect} direct` : ""}
-          {emp.totalDirect && emp.indirect ? " · " : ""}
-          {emp.indirect ? `${emp.indirect} indirect` : ""}
+    <div>
+      <div className="text-eyebrow text-gold mb-3">Operational Footprint</div>
+      <h3 className="font-display text-[22px] mb-5">Employment Generation</h3>
+      <div className="surface-card rounded-2xl p-8 grid lg:grid-cols-5 gap-8 items-center">
+        <div className="lg:col-span-2 text-center lg:text-left">
+          <div className="text-eyebrow text-muted-foreground mb-2">Total Jobs Created</div>
+          <div className="font-display text-[56px] leading-none text-foreground num-tabular">{total || "—"}</div>
+          <div className="text-[13px] text-muted-foreground mt-3">
+            {emp.totalDirect ? `${emp.totalDirect} direct` : ""}
+            {emp.totalDirect && emp.indirect ? " · " : ""}
+            {emp.indirect ? `${emp.indirect} indirect` : ""}
+          </div>
         </div>
-
         {segments.length > 0 && (
-          <div className="mt-8 max-w-2xl mx-auto">
+          <div className="lg:col-span-3">
             <div className="flex h-3 rounded-full overflow-hidden">
               {segments.map((s) => (
                 <div
@@ -986,7 +957,7 @@ function EmploymentSection({ ed }: { ed: any }) {
                 />
               ))}
             </div>
-            <div className="flex flex-wrap justify-center gap-x-5 gap-y-2 mt-4">
+            <div className="flex flex-wrap gap-x-5 gap-y-2 mt-4">
               {segments.map((s) => (
                 <div key={s.label} className="flex items-center gap-2 text-[12px]">
                   <span className="w-2 h-2 rounded-full" style={{ backgroundColor: s.color }} />
@@ -998,18 +969,152 @@ function EmploymentSection({ ed }: { ed: any }) {
           </div>
         )}
       </div>
+    </div>
+  );
+}
 
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-        {Object.entries(emp).map(([key, val]) =>
-          val != null ? (
-            <MetricCard
-              key={key}
-              label={key.replace(/([A-Z])/g, " $1").trim()}
-              value={String(val)}
-            />
-          ) : null
-        )}
+// ═════════════════════════════════════════════════════════
+// FINANCIAL DASHBOARD — cross-statement synthesis hub
+// ═════════════════════════════════════════════════════════
+function FinancialDashboardSection({ ed, onJump }: { ed: any; onJump: (id: string) => void }) {
+  if (!ed) {
+    return (
+      <SectionPage>
+        <PageHeader eyebrow="At a Glance" title="Financial Dashboard" />
+        <EmptyState />
+      </SectionPage>
+    );
+  }
+
+  const pl = ed?.plAccount;
+  const ra = ed?.ratioAnalysis;
+  const cf = ed?.cashFlow;
+  const fe = ed?.financialEvaluation;
+
+  // Latest-year KPIs sourced across statements
+  const revArr = pl?.revenue || [];
+  const npArr = pl?.netProfit || [];
+  const lastIdx = revArr.length - 1;
+  const latestRev = lastIdx >= 0 ? revArr[lastIdx] : null;
+  const latestNp = lastIdx >= 0 ? npArr[lastIdx] : null;
+  const netMargin = latestRev && latestNp != null && latestRev !== 0 ? (latestNp / latestRev) * 100 : null;
+  const avgDscr = meanFinite(ra?.dscr || []);
+  const avgCurrent = meanFinite(ra?.currentRatio || []);
+
+  const tiles: { label: string; value: string; sub?: string }[] = [
+    {
+      label: "Latest Year Revenue",
+      value: latestRev != null ? fmtRupeesL(latestRev) : "—",
+      sub: pl?.years?.[lastIdx] ? `FY ${pl.years[lastIdx]}` : undefined,
+    },
+    {
+      label: "Latest Net Margin",
+      value: netMargin != null ? `${netMargin.toFixed(1)}%` : "—",
+      sub: latestNp != null ? `${fmtRupeesL(latestNp)} PAT` : undefined,
+    },
+    {
+      label: "Avg DSCR",
+      value: avgDscr != null ? `${avgDscr.toFixed(2)}×` : "—",
+      sub: avgDscr != null ? (avgDscr >= 1.5 ? "Above benchmark" : avgDscr >= 1.2 ? "Meets minimum" : "Below threshold") : undefined,
+    },
+    {
+      label: "Avg Current Ratio",
+      value: avgCurrent != null ? `${avgCurrent.toFixed(2)}×` : "—",
+      sub: avgCurrent != null ? (avgCurrent >= 1.5 ? "Comfortable" : avgCurrent >= 1 ? "Adequate" : "Strained") : undefined,
+    },
+    {
+      label: "Project IRR",
+      value: fe?.irr || "—",
+      sub: fe?.npv ? `NPV ${fe.npv}` : undefined,
+    },
+    {
+      label: "Simple Payback",
+      value: fe?.simplePaybackPeriod || "—",
+      sub: fe?.discountedPaybackPeriod ? `Discounted: ${fe.discountedPaybackPeriod}` : undefined,
+    },
+  ];
+
+  const snapshot = insightFinancialSnapshot(ed);
+
+  // Mini sparkline data builders — preserve nulls so missing data
+  // creates a gap in the line, not a fabricated zero-inflection.
+  const mkSpark = (years?: number[], values?: (number | null)[]) => {
+    if (!years || !values) return [];
+    return years.map((y, i) => ({ year: y, value: values[i] ?? null }));
+  };
+  const revSpark = mkSpark(pl?.years, pl?.revenue);
+  const npSpark = mkSpark(pl?.years, pl?.netProfit);
+  const dscrSpark = mkSpark(ra?.years, ra?.dscr);
+  const cashSpark = mkSpark(cf?.years, cf?.netCashFlow);
+
+  const charts: { key: string; label: string; subtitle: string; data: { year: number; value: number | null }[]; color: string; jumpTo: string }[] = [
+    { key: "rev", label: "Revenue Trajectory", subtitle: "₹ in Lakhs", data: revSpark, color: NAVY, jumpTo: "pl" },
+    { key: "np", label: "Net Profit Trajectory", subtitle: "₹ in Lakhs", data: npSpark, color: GOLD, jumpTo: "pl" },
+    { key: "dscr", label: "DSCR Trend", subtitle: "× coverage", data: dscrSpark, color: NAVY_LIGHT, jumpTo: "ratios" },
+    { key: "cash", label: "Net Cash Flow", subtitle: "₹ in Lakhs", data: cashSpark, color: "hsl(142 45% 35%)", jumpTo: "cashflow" },
+  ].filter((c) => c.data.some((d) => d.value != null));
+
+  return (
+    <SectionPage>
+      <PageHeader
+        eyebrow="At a Glance"
+        title="Financial Dashboard"
+        description="The banker's one-glance view — signals pulled from every statement, synthesised into a single read."
+      />
+
+      {/* AI Snapshot — Layer 1, the claim */}
+      {snapshot && (
+        <div className="surface-card rounded-2xl p-8 mb-8 border-l-2 border-l-gold">
+          <div className="text-eyebrow text-gold mb-2">Financial Snapshot</div>
+          <p className="font-display text-[19px] leading-[1.55] text-foreground/90">{snapshot}</p>
+        </div>
+      )}
+
+      {/* 6 KPI tiles spanning all statements */}
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-10">
+        {tiles.map((t) => (
+          <MetricCard key={t.label} label={t.label} value={t.value} description={t.sub} />
+        ))}
       </div>
+
+      {/* 4 mini sparklines — click any to jump to its full statement */}
+      {charts.length > 0 && (
+        <div>
+          <div className="text-eyebrow text-gold mb-4">Cross-Statement Trends</div>
+          <h3 className="font-display text-[22px] mb-5">Key Trajectories</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            {charts.map((c) => (
+              <button
+                key={c.key}
+                onClick={() => onJump(c.jumpTo)}
+                className="surface-card rounded-2xl p-6 text-left hover:border-gold/40 hover:shadow-md transition-all group"
+                data-testid={`dashboard-spark-${c.key}`}
+              >
+                <div className="flex items-start justify-between mb-3">
+                  <div>
+                    <div className="text-eyebrow text-muted-foreground mb-1">{c.subtitle}</div>
+                    <div className="font-display text-[17px] text-foreground">{c.label}</div>
+                  </div>
+                  <ArrowRight className="w-4 h-4 text-muted-foreground/60 group-hover:text-gold group-hover:translate-x-0.5 transition-all" />
+                </div>
+                <div className="h-[110px] -mx-2">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={c.data} margin={{ top: 6, right: 8, bottom: 4, left: 8 }}>
+                      <XAxis dataKey="year" tick={{ fontSize: 10, fill: "hsl(218 15% 50%)" }} axisLine={false} tickLine={false} />
+                      <YAxis hide />
+                      <RechartsTooltip
+                        contentStyle={{ fontSize: 12, borderRadius: 8, border: "1px solid hsl(218 20% 88%)" }}
+                        labelStyle={{ fontSize: 11, color: "hsl(218 15% 50%)" }}
+                      />
+                      <Line type="monotone" dataKey="value" stroke={c.color} strokeWidth={2} dot={{ r: 3, fill: c.color }} activeDot={{ r: 5 }} connectNulls={false} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </SectionPage>
   );
 }
@@ -1027,27 +1132,6 @@ function SectionPage({ children }: { children: React.ReactNode }) {
     >
       {children}
     </motion.div>
-  );
-}
-
-function ListCard({ tone, label, items }: { tone: "emerald" | "amber"; label: string; items?: string[] | null }) {
-  const tones = {
-    emerald: { bar: "bg-emerald-500/80", text: "text-emerald-700", dot: "text-emerald-500/70" },
-    amber: { bar: "bg-amber-500/80", text: "text-amber-700", dot: "text-amber-500/70" },
-  }[tone];
-  return (
-    <div className="surface-card rounded-2xl p-7 relative overflow-hidden">
-      <div className={`absolute top-0 left-0 right-0 h-[3px] ${tones.bar}`} />
-      <div className={`text-eyebrow ${tones.text} mb-4`}>{label}</div>
-      <ul className="space-y-3">
-        {items?.map((s, i) => (
-          <li key={i} className="text-[14px] leading-relaxed text-foreground/85 flex gap-2.5">
-            <span className={`${tones.dot} mt-1.5 text-[8px]`}>●</span>
-            <span>{s}</span>
-          </li>
-        ))}
-      </ul>
-    </div>
   );
 }
 

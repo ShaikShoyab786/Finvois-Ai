@@ -54,10 +54,12 @@ export function Sidebar({ firmName, tagline, activeId, onSelect, sections }: Sid
       {/* Grouped nav */}
       <nav className="flex-1 overflow-y-auto px-4 py-6 space-y-7">
         {sections.map((group) => (
-          <div key={group.group}>
-            <div className="text-eyebrow text-sidebar-foreground/40 px-3 mb-2.5">
-              {group.group}
-            </div>
+          <div key={group.group || "_default"}>
+            {group.group && (
+              <div className="text-eyebrow text-sidebar-foreground/40 px-3 mb-2.5">
+                {group.group}
+              </div>
+            )}
             <div className="space-y-0.5">
               {group.items.map((item) => {
                 const isActive = activeId === item.id;

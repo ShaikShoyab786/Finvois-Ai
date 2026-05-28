@@ -214,3 +214,49 @@ export function meanFinite(values: (number | null | undefined)[]): number | null
   if (!valid.length) return null;
   return valid.reduce((a, b) => a + b, 0) / valid.length;
 }
+
+// ─── Financial Dashboard synthesis ─────────────────────
+/**
+ * A cross-statement, banker-style snapshot. Pulls signals from P&L,
+ * Cash Flow, Ratios and Evaluation to assemble a single paragraph
+ * verdict tying them together.
+ */
+export function insightFinancialSnapshot(ed: any): string | null {
+  if (!ed) return null;
+  const parts: string[] = [];
+
+  const pl = ed?.plAccount;
+  if (pl?.years?.length) {
+    const rev = safeArr(pl.revenue);
+    const first = firstNonZero(rev);
+    const last = lastNonZero(rev);
+    if (first && last && first > 0) {
+      parts.push(`Revenue scales ${fmtMultiple(last / first)} across the projection window`);
+    }
+  }
+
+  const ra = ed?.ratioAnalysis;
+  if (ra?.years?.length) {
+    const dscr = meanFinite(ra.dscr || []);
+    if (dscr != null) {
+      if (dscr >= 1.5) parts.push(`with an average DSCR of ${dscr.toFixed(2)}× (above the 1.5× banking benchmark)`);
+      else if (dscr >= 1.2) parts.push(`with an average DSCR of ${dscr.toFixed(2)}× (meeting the 1.2× minimum)`);
+      else parts.push(`with a thin average DSCR of ${dscr.toFixed(2)}× (below the 1.2× lender threshold)`);
+    }
+  }
+
+  const cf = ed?.cashFlow;
+  if (cf?.years?.length) {
+    const op = safeArr(cf.operatingCashFlow);
+    const firstPos = op.findIndex((v) => v > 0);
+    if (firstPos === 0) parts.push("Operating cash is positive from year one");
+    else if (firstPos > 0) parts.push(`Operating cash turns positive in ${cf.years[firstPos]}`);
+  }
+
+  const fe = ed?.financialEvaluation;
+  if (fe?.irr) parts.push(`The project clocks an IRR of ${fe.irr}`);
+  if (fe?.simplePaybackPeriod) parts.push(`with a simple payback of ${fe.simplePaybackPeriod}`);
+
+  if (!parts.length) return null;
+  return parts.join(", ") + ".";
+}
