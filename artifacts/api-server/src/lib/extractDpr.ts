@@ -48,6 +48,11 @@ CRITICAL RULES:
    - Use values exactly as printed; set any line absent from the document to null.
 12. For implementationTimeline (the project implementation schedule / phasing, often titled "Implementation Schedule" or "Time Schedule of Implementation"), capture each phase IN ORDER as an array: phase (phase name, e.g. "Construction", "Machinery Erection", "Trial Run", "Commercial Production"), startDate (start date as printed), endDate (end / completion date as printed), status (any status note such as "Ongoing", else null). Set any absent field to null. If no schedule is present, return an empty array.
 13. For productPortfolio (the product range / list of products with capacities, often titled "Product Profile", "Product Range" or "Installed Capacity"), capture each row as an array: product (product name with specification exactly as printed, e.g. "U Bolts (20MM to 300MM)"), productionCapacity (production capacity per annum exactly as printed, e.g. "10-15 tonnes", "5 to 7 Lacs Nos"). Set any absent field to null. If no product list is present, return an empty array.
+14. For the detailed financial-evaluation tables below, OVERRIDE rule #3: these specific fields must be plain JSON NUMBERS (no commas, no currency symbols, no "%"); preserve negatives as negative numbers. Set the whole structure to null / empty array if the corresponding table is absent.
+   - financialEvaluation.waccBreakdown (the "Calculation of Weighted Average Cost of Capital (WACC)" table): one object per row IN ORDER, including the TOTAL row, with source (e.g. "Equity Capital", "Term Loan", "Working capital Loan", "Total"), amount (Sources of Funds in Rs Lacs — keep in lakhs, e.g. 31.5), portionPct (Portion %), costPct (Cost %), waccContributionPct (the WACC column / contribution %). Set a missing cell to null (the Total row usually has only amount + waccContributionPct).
+   - financialEvaluation.npvAnalysis (the "Present Value of Future Cash Flows & Net Present Value (NPV)" block, figures in rupees): pvFutureCashFlows (PRESENT VALUE OF FUTURE CASH FLOWS), initialInvestment (CASH OUTFLOWS), netPresentValue (NET PRESENT VALUE).
+   - financialEvaluation.simplePaybackSchedule (the "Investment Payback Period (Simple Method)" table, rupees): one object per row IN ORDER. The first row is the initial outflow — set year to "Initial" with a negative cashFlow and cumulative. Each subsequent row: year (the period label exactly as printed, e.g. "2025-26 Sep to Mar", "2026-27"), cashFlow (Amount Rs for that year), cumulative (Cumulative Cash flows Rs, negative until recovered).
+   - financialEvaluation.dcfPaybackSchedule (the "Investment Payback Period (Discounted Cashflows Method)" table, rupees): one object per row IN ORDER. First row is the initial outflow with year "Initial". Each subsequent row: year (period label), cashFlow (undiscounted Amount Rs), discountedCashFlow (Discounted Cash Flows Rs), cumulativeDiscounted (Cumulative Discounted Cash flows Rs).
 
 Extract the following structure:
 {
@@ -209,7 +214,11 @@ Extract the following structure:
     "bep": string|null,
     "marginOfSafety": string|null,
     "altmanZScore": string|null,
-    "averageDscr": string|null
+    "averageDscr": string|null,
+    "waccBreakdown": [{ "source": string, "amount": number|null, "portionPct": number|null, "costPct": number|null, "waccContributionPct": number|null }],
+    "npvAnalysis": { "pvFutureCashFlows": number|null, "initialInvestment": number|null, "netPresentValue": number|null },
+    "simplePaybackSchedule": [{ "year": string, "cashFlow": number|null, "cumulative": number|null }],
+    "dcfPaybackSchedule": [{ "year": string, "cashFlow": number|null, "discountedCashFlow": number|null, "cumulativeDiscounted": number|null }]
   },
   "employmentGeneration": {
     "skilled": number|null,

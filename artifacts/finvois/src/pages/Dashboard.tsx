@@ -1908,73 +1908,380 @@ function ThresholdGaugesBlock({ fe }: { fe: any }) {
   );
 }
 
+// ── Financial-evaluation formatters & helpers ───────────────
+// Raw-rupee evaluation-table figures, Indian grouping, signed.
+const fmtRupeeSigned = (n: number | null | undefined): string =>
+  n == null || !isFinite(n) ? "—" : `${n < 0 ? "−" : ""}₹${Math.abs(n).toLocaleString("en-IN")}`;
+
+// Short fiscal-year label for payback chart axes, e.g. "FY26" ("*" = partial year).
+const fyShort = (y: any): string => {
+  const s = String(y ?? "");
+  if (/initial/i.test(s)) return "Initial";
+  const m = s.match(/(\d{4})-(\d{2})/);
+  if (!m) return s.slice(0, 8);
+  return `FY${m[2]}${/sep|to|month|partial/i.test(s) ? "*" : ""}`;
+};
+
+function EvalChip({ label, tone }: { label: string; tone: "good" | "risk" | "neutral" }) {
+  const cls =
+    tone === "good"
+      ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
+      : tone === "risk"
+        ? "bg-rose-50 text-rose-700 ring-rose-200"
+        : "bg-blue-50 text-blue-700 ring-blue-200";
+  return <span className={`text-[10.5px] font-semibold px-2 py-0.5 rounded-full ring-1 ${cls}`}>{label}</span>;
+}
+
+function EvalKpiCard({ label, value, sub, chip, chipTone, valueClass }: { label: string; value: string | null; sub?: string; chip?: string | null; chipTone: "good" | "risk" | "neutral"; valueClass?: string }) {
+  return (
+    <div className="surface-card rounded-2xl p-5">
+      <div className="flex items-start justify-between mb-3">
+        <div className="text-eyebrow text-muted-foreground">{label}</div>
+        {chip && <EvalChip label={chip} tone={chipTone} />}
+      </div>
+      <div className={`font-display text-[26px] leading-[1.05] num-tabular tracking-tight ${valueClass ?? "text-foreground"}`}>{value || "—"}</div>
+      {sub && <div className="text-[11.5px] text-muted-foreground mt-1">{sub}</div>}
+    </div>
+  );
+}
+
+// Pie of capital sources weighted by cost, with total WACC in the centre.
+function WaccPieCard({ rows, totalWacc }: { rows: any[]; totalWacc: number | null }) {
+  const comps = rows.filter((r) => !/total/i.test(String(r.source ?? "")));
+  const data = comps.map((r) => ({ name: r.source, value: Number(r.amount ?? r.portionPct ?? 0) }));
+  if (data.length === 0) return null;
+  return (
+    <DashCard title="Cost of Capital (WACC)" subtitle="Capital sources weighted by their cost.">
+      <div className="h-[200px] relative">
+        <ResponsiveContainer width="100%" height="100%">
+          <PieChart>
+            <Pie data={data} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={78} innerRadius={50} paddingAngle={2}>
+              {data.map((_, i) => (
+                <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+              ))}
+            </Pie>
+            <RechartsTooltip contentStyle={tooltipStyle} formatter={(v: any) => `${fmtNum(Number(v))}L`} />
+          </PieChart>
+        </ResponsiveContainer>
+        {totalWacc != null && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+            <div className="font-display text-[22px] num-tabular" style={{ color: NAVY }}>{totalWacc.toFixed(2)}%</div>
+            <div className="text-[10px] text-muted-foreground uppercase tracking-wide">WACC</div>
+          </div>
+        )}
+      </div>
+      <div className="flex flex-col gap-1.5 mt-3">
+        {comps.map((r, i) => (
+          <div key={i} className="flex items-center justify-between text-[12px]">
+            <span className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full" style={{ backgroundColor: PIE_COLORS[i % PIE_COLORS.length] }} />
+              <span className="text-muted-foreground">{r.source}</span>
+            </span>
+            <span className="num-tabular text-foreground">{r.waccContributionPct != null ? `${r.waccContributionPct}%` : "—"}</span>
+          </div>
+        ))}
+      </div>
+    </DashCard>
+  );
+}
+
+// PV of future cash flows vs initial investment → NPV.
+function NpvCard({ npv }: { npv: any }) {
+  if (!npv || (npv.pvFutureCashFlows == null && npv.initialInvestment == null && npv.netPresentValue == null)) return null;
+  const rows = [
+    { label: "PV of Future Cash Flows", value: npv.pvFutureCashFlows, tone: "text-foreground", strong: false },
+    { label: "Initial Investment", value: npv.initialInvestment, tone: "text-foreground", strong: false },
+    { label: "Net Present Value", value: npv.netPresentValue, tone: (npv.netPresentValue ?? 0) >= 0 ? "text-emerald-700" : "text-rose-700", strong: true },
+  ];
+  return (
+    <DashCard title="NPV Analysis" subtitle="Discounted at the bank interest rate.">
+      <div className="space-y-3 mt-1">
+        {rows.map((r) => (
+          <div key={r.label} className={`flex items-center justify-between ${r.strong ? "pt-3 border-t border-border" : ""}`}>
+            <span className="text-[12.5px] text-muted-foreground">{r.label}</span>
+            <span className={`num-tabular ${r.strong ? "font-display text-[20px]" : "text-[15px] font-medium"} ${r.tone}`}>{fmtRupeeSigned(r.value)}</span>
+          </div>
+        ))}
+      </div>
+    </DashCard>
+  );
+}
+
+// Horizontal bars comparing IRR / MIRR / WACC plus a viability verdict.
+function IrrBarsCard({ irr, mirr, wacc }: { irr: number | null; mirr: number | null; wacc: number | null }) {
+  const rows = ([
+    { label: "IRR", v: irr, color: EMERALD },
+    { label: "MIRR", v: mirr, color: NAVY },
+    { label: "WACC", v: wacc, color: GOLD },
+  ].filter((r) => r.v != null)) as { label: string; v: number; color: string }[];
+  if (rows.length === 0) return null;
+  const max = Math.max(...rows.map((r) => r.v)) * 1.2 || 1;
+  const ok = irr != null && wacc != null && irr > wacc;
+  return (
+    <DashCard title="IRR vs MIRR vs WACC" subtitle="Returns measured against the cost of capital.">
+      <div className="space-y-4 mt-2">
+        {rows.map((r) => (
+          <div key={r.label}>
+            <div className="flex items-center justify-between text-[12px] mb-1">
+              <span className="text-muted-foreground">{r.label}</span>
+              <span className="num-tabular font-medium text-foreground">{r.v.toFixed(2)}%</span>
+            </div>
+            <div className="h-2.5 rounded-full bg-slate-100 overflow-hidden">
+              <div className="h-full rounded-full" style={{ width: `${Math.min(100, (r.v / max) * 100)}%`, backgroundColor: r.color }} />
+            </div>
+          </div>
+        ))}
+      </div>
+      {irr != null && wacc != null && (
+        <div className={`mt-5 rounded-xl p-3 text-[12px] leading-snug ${ok ? "bg-emerald-50 text-emerald-800" : "bg-rose-50 text-rose-800"}`}>
+          {ok
+            ? `IRR (${irr.toFixed(2)}%) exceeds WACC (${wacc.toFixed(2)}%) — the project is value-accretive.`
+            : `IRR (${irr.toFixed(2)}%) does not clear WACC (${wacc.toFixed(2)}%) — returns fall short of the cost of capital.`}
+        </div>
+      )}
+    </DashCard>
+  );
+}
+
+// Cumulative-recovery bar chart shared by the simple & discounted payback panels.
+function PaybackChartCard({ title, subtitle, data, color }: { title: string; subtitle: string; data: { name: string; cum: number | null }[]; color: string }) {
+  const pts = data.filter((d) => d.cum != null) as { name: string; cum: number }[];
+  if (pts.length === 0) return null;
+  const maxAbs = Math.max(...pts.map((d) => Math.abs(d.cum)), 1);
+  const fmt = lakhFormatter(maxAbs);
+  return (
+    <DashCard title={title} subtitle={subtitle}>
+      <div className="h-[260px]">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={pts} margin={{ top: 8, right: 8, left: 4, bottom: 4 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="hsl(220 16% 92%)" vertical={false} />
+            <XAxis dataKey="name" tick={axisTick} tickLine={false} axisLine={false} />
+            <YAxis tickFormatter={(v) => fmt(Number(v))} tick={axisTick} tickLine={false} axisLine={false} width={44} />
+            <RechartsTooltip contentStyle={tooltipStyle} formatter={(v: any) => fmtRupeeSigned(Number(v))} />
+            <ReferenceLine y={0} stroke="hsl(215 16% 60%)" />
+            <Bar dataKey="cum" radius={[4, 4, 0, 0]}>
+              {pts.map((d, i) => (
+                <Cell key={i} fill={d.cum >= 0 ? color : ROSE} />
+              ))}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+    </DashCard>
+  );
+}
+
+function WaccTableBlock({ rows }: { rows: any[] }) {
+  if (!rows.length) return null;
+  return (
+    <DashCard title="WACC Calculation" subtitle="Weighted average cost of capital by source of funds.">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Source of Funds</TableHead>
+            <TableHead className="text-right">Amount (₹ Lacs)</TableHead>
+            <TableHead className="text-right">Portion %</TableHead>
+            <TableHead className="text-right">Cost %</TableHead>
+            <TableHead className="text-right">WACC Contribution</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {rows.map((r, i) => {
+            const isTotal = /total/i.test(String(r.source ?? ""));
+            return (
+              <TableRow key={i} className={isTotal ? "font-semibold bg-muted/40" : ""}>
+                <TableCell>{r.source}</TableCell>
+                <TableCell className="text-right num-tabular">{r.amount != null ? fmtNum(r.amount) : "—"}</TableCell>
+                <TableCell className="text-right num-tabular">{r.portionPct != null ? `${r.portionPct}%` : "—"}</TableCell>
+                <TableCell className="text-right num-tabular">{r.costPct != null ? `${r.costPct}%` : "—"}</TableCell>
+                <TableCell className="text-right num-tabular">{r.waccContributionPct != null ? `${r.waccContributionPct}%` : "—"}</TableCell>
+              </TableRow>
+            );
+          })}
+        </TableBody>
+      </Table>
+    </DashCard>
+  );
+}
+
+function SimplePaybackTableBlock({ rows }: { rows: any[] }) {
+  if (!rows.length) return null;
+  return (
+    <DashCard title="Simple Payback Schedule" subtitle="Year-by-year recovery of the investment.">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Year</TableHead>
+            <TableHead className="text-right">Cash Flow (₹)</TableHead>
+            <TableHead className="text-right">Cumulative (₹)</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {rows.map((r, i) => (
+            <TableRow key={i}>
+              <TableCell>{/initial/i.test(String(r.year)) ? "Initial" : r.year}</TableCell>
+              <TableCell className="text-right num-tabular">{fmtRupeeSigned(r.cashFlow)}</TableCell>
+              <TableCell className={`text-right num-tabular ${(r.cumulative ?? 0) >= 0 ? "text-emerald-700" : "text-rose-600"}`}>{fmtRupeeSigned(r.cumulative)}</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </DashCard>
+  );
+}
+
+function DcfPaybackTableBlock({ rows }: { rows: any[] }) {
+  if (!rows.length) return null;
+  return (
+    <DashCard title="Discounted Payback Schedule" subtitle="Discounted cash flows recovering the investment.">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Year</TableHead>
+            <TableHead className="text-right">Cash Flow (₹)</TableHead>
+            <TableHead className="text-right">Discounted CF (₹)</TableHead>
+            <TableHead className="text-right">Cumulative (₹)</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {rows.map((r, i) => (
+            <TableRow key={i}>
+              <TableCell>{/initial/i.test(String(r.year)) ? "Initial" : r.year}</TableCell>
+              <TableCell className="text-right num-tabular">{fmtRupeeSigned(r.cashFlow)}</TableCell>
+              <TableCell className="text-right num-tabular">{fmtRupeeSigned(r.discountedCashFlow)}</TableCell>
+              <TableCell className={`text-right num-tabular ${(r.cumulativeDiscounted ?? 0) >= 0 ? "text-emerald-700" : "text-rose-600"}`}>{fmtRupeeSigned(r.cumulativeDiscounted)}</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </DashCard>
+  );
+}
+
 function EvaluationSection({ ed, verdict, isLoadingVerdict }: { ed: any; verdict?: string | null; isLoadingVerdict?: boolean }) {
   const fe = ed?.financialEvaluation;
   if (!fe) return (
     <SectionPage>
-      <PageHeader eyebrow="Quality" title="Financial Evaluation" />
+      <PageHeader eyebrow="Methods" title="Financial Evaluation Methods" description="IRR · MIRR · WACC · NPV · PI · Payback Period" />
       <SectionVerdict verdict={verdict} isLoading={isLoadingVerdict} />
       <EmptyState />
     </SectionPage>
   );
 
-  const groups = [
-    {
-      title: "Capital Returns",
-      eyebrow: "Returns",
-      metrics: [
-        { label: "IRR", value: fe.irr, description: "Internal rate of return" },
-        { label: "MIRR", value: fe.mirr, description: "Modified internal rate of return" },
-        { label: "NPV", value: fe.npv, description: "Net present value" },
-        { label: "WACC", value: fe.wacc, description: "Weighted avg. cost of capital" },
-        { label: "Profitability Index", value: fe.profitabilityIndex, description: "PV of cash flows / investment" },
-      ],
-    },
-    {
-      title: "Payback Profile",
-      eyebrow: "Payback",
-      metrics: [
-        { label: "Simple Payback", value: fe.simplePaybackPeriod, description: "Years to recover investment" },
-        { label: "Discounted Payback", value: fe.discountedPaybackPeriod, description: "Discounted recovery period" },
-      ],
-    },
-    {
-      title: "Risk Profile",
-      eyebrow: "Risk",
-      metrics: [
-        { label: "BEP", value: fe.bep, description: "Break-even point" },
-        { label: "Margin of Safety", value: fe.marginOfSafety, description: "Sales cushion above BEP" },
-        { label: "Altman Z-Score", value: fe.altmanZScore, description: "Bankruptcy risk indicator" },
-        { label: "Average DSCR", value: fe.averageDscr, description: "Debt service coverage" },
-      ],
-    },
+  const irr = parseNumeric(fe.irr);
+  const mirr = parseNumeric(fe.mirr);
+  const wacc = parseNumeric(fe.wacc);
+  const pi = parseNumeric(fe.profitabilityIndex);
+  const simplePb = parseNumeric(fe.simplePaybackPeriod);
+
+  const wb: any[] = Array.isArray(fe.waccBreakdown) ? fe.waccBreakdown : [];
+  const npvA = fe.npvAnalysis ?? null;
+  const simpleSched: any[] = Array.isArray(fe.simplePaybackSchedule) ? fe.simplePaybackSchedule : [];
+  const dcfSched: any[] = Array.isArray(fe.dcfPaybackSchedule) ? fe.dcfPaybackSchedule : [];
+
+  // Total WACC = explicit Total-row contribution, else sum of component
+  // contributions, else fe.wacc. Only fall back to the sum when at least one
+  // component contribution is a finite number (avoids a misleading 0%).
+  const totalRow = wb.find((r) => /total/i.test(String(r.source ?? "")));
+  const compContribs = wb
+    .filter((r) => !/total/i.test(String(r.source ?? "")))
+    .map((r) => Number(r.waccContributionPct))
+    .filter((n) => isFinite(n));
+  const totalWacc: number | null =
+    (totalRow?.waccContributionPct ?? null) ??
+    (compContribs.length ? compContribs.reduce((s, n) => s + n, 0) : null) ??
+    wacc;
+
+  // NPV headline in lakhs — prefer the rupee figure from the NPV table.
+  let npvDisplay: string | null;
+  if (npvA?.netPresentValue != null) {
+    npvDisplay = fmtRupeesL(npvA.netPresentValue / 1e5);
+  } else {
+    const n = parseNumeric(fe.npv);
+    npvDisplay = n == null ? (fe.npv || null) : fmtRupeesL(Math.abs(n) >= 1000 ? n / 1e5 : n);
+  }
+  const npvPositive = (npvA?.netPresentValue ?? parseNumeric(fe.npv) ?? 0) >= 0;
+
+  const kpis = [
+    { label: "IRR", value: fe.irr ?? null, sub: wacc != null ? `vs WACC ${wacc.toFixed(2)}%` : "Internal rate of return", chip: irr != null && wacc != null ? (irr > wacc ? "Accept" : "Review") : null, chipTone: (irr != null && wacc != null && irr > wacc ? "good" : "risk") as "good" | "risk" | "neutral", valueClass: "text-emerald-700" },
+    { label: "MIRR", value: fe.mirr ?? null, sub: "Reinvested at FD rate", chip: mirr != null && wacc != null ? (mirr > wacc ? "Accept" : "Review") : null, chipTone: (mirr != null && wacc != null && mirr > wacc ? "good" : "risk") as "good" | "risk" | "neutral", valueClass: "text-emerald-700" },
+    { label: "WACC", value: fe.wacc ?? null, sub: "Cost of capital", chip: "Hurdle", chipTone: "neutral" as "good" | "risk" | "neutral", valueClass: "text-foreground" },
+    { label: "NPV", value: npvDisplay, sub: "Positive ⇒ viable", chip: npvDisplay ? (npvPositive ? "Accept" : "Review") : null, chipTone: (npvPositive ? "good" : "risk") as "good" | "risk" | "neutral", valueClass: npvPositive ? "text-emerald-700" : "text-rose-700" },
+    { label: "PI", value: fe.profitabilityIndex ?? null, sub: "> 1 ⇒ profitable", chip: pi != null ? (pi > 1 ? "Accept" : "Review") : null, chipTone: (pi != null && pi > 1 ? "good" : "risk") as "good" | "risk" | "neutral", valueClass: "text-foreground" },
+    { label: "Payback", value: simplePb != null ? `${simplePb} Yrs` : (fe.simplePaybackPeriod ?? null), sub: "Simple method", chip: simplePb != null ? "Accept" : null, chipTone: "good" as "good" | "risk" | "neutral", valueClass: "text-foreground" },
   ];
+
+  // Risk/solvency metrics not covered by the six headline cards.
+  const riskMetrics = [
+    { label: "BEP", value: fe.bep, description: "Break-even point" },
+    { label: "Margin of Safety", value: fe.marginOfSafety, description: "Sales cushion above BEP" },
+    { label: "Altman Z-Score", value: fe.altmanZScore, description: "Bankruptcy risk indicator" },
+    { label: "Average DSCR", value: fe.averageDscr, description: "Debt service coverage" },
+  ].filter((m) => m.value);
+
+  const simpleChart = simpleSched.filter((r) => !/initial/i.test(String(r.year))).map((r) => ({ name: fyShort(r.year), cum: r.cumulative ?? null }));
+  const dcfChart = dcfSched.filter((r) => !/initial/i.test(String(r.year))).map((r) => ({ name: fyShort(r.year), cum: r.cumulativeDiscounted ?? null }));
+  const dcfPb = parseNumeric(fe.discountedPaybackPeriod);
 
   return (
     <SectionPage>
-      <PageHeader eyebrow="Quality" title="Financial Evaluation" description="Returns, payback and risk metrics determining whether this project clears the bar." />
+      <PageHeader eyebrow="Methods" title="Financial Evaluation Methods" description="IRR · MIRR · WACC · NPV · PI · Payback Period" />
       <SectionVerdict verdict={verdict} isLoading={isLoadingVerdict} />
 
-      {/* Threshold gauges — does the project clear the bar that banks actually use? */}
-      <ThresholdGaugesBlock fe={fe} />
-
-      <div className="space-y-9">
-        {groups.map((g) => {
-          const filtered = g.metrics.filter((m) => m.value);
-          if (!filtered.length) return null;
-          return (
-            <div key={g.title}>
-              <div className="text-eyebrow text-gold mb-4">{g.eyebrow}</div>
-              <h3 className="font-display text-[22px] mb-5">{g.title}</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {filtered.map((m) => (
-                  <MetricCard key={m.label} label={m.label} value={m.value} description={m.description} />
-                ))}
-              </div>
-            </div>
-          );
-        })}
+      {/* Six headline evaluation metrics */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-9">
+        {kpis.map((k) => (
+          <EvalKpiCard key={k.label} label={k.label} value={k.value} sub={k.sub} chip={k.chip} chipTone={k.chipTone} valueClass={k.valueClass} />
+        ))}
       </div>
+
+      {/* Cost of capital · NPV · returns-vs-cost panels */}
+      {(wb.length > 0 || npvA || irr != null) && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-9">
+          <WaccPieCard rows={wb} totalWacc={totalWacc} />
+          <NpvCard npv={npvA} />
+          <IrrBarsCard irr={irr} mirr={mirr} wacc={wacc} />
+        </div>
+      )}
+
+      {/* Payback recovery charts */}
+      {(simpleChart.length > 0 || dcfChart.length > 0) && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-9">
+          <PaybackChartCard title="Payback — Simple Method" subtitle={simplePb != null ? `Cumulative recovery · ${simplePb} yrs` : "Cumulative cash-flow recovery"} data={simpleChart} color={EMERALD} />
+          <PaybackChartCard title="Payback — Discounted Method" subtitle={dcfPb != null ? `Discounted recovery · ${dcfPb} yrs` : "Discounted cash-flow recovery"} data={dcfChart} color={PURPLE} />
+        </div>
+      )}
+
+      {/* WACC calculation table */}
+      {wb.length > 0 && (
+        <div className="mb-9">
+          <WaccTableBlock rows={wb} />
+        </div>
+      )}
+
+      {/* Year-by-year payback schedules */}
+      {(simpleSched.length > 0 || dcfSched.length > 0) && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-9">
+          <SimplePaybackTableBlock rows={simpleSched} />
+          <DcfPaybackTableBlock rows={dcfSched} />
+        </div>
+      )}
+
+      {/* Risk & solvency metrics not in the six headline cards */}
+      {riskMetrics.length > 0 && (
+        <div className="mb-9">
+          <div className="text-eyebrow text-gold mb-4">Risk & Solvency</div>
+          <h3 className="font-display text-[22px] mb-5">Additional Indicators</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {riskMetrics.map((m) => (
+              <MetricCard key={m.label} label={m.label} value={m.value} description={m.description} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Banker threshold gauges — does the project clear the bar? */}
+      <ThresholdGaugesBlock fe={fe} />
     </SectionPage>
   );
 }
