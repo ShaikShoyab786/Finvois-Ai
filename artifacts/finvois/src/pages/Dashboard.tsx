@@ -66,6 +66,7 @@ const NAV: NavSection[] = [
       { id: "pl", label: "P&L Account" },
       { id: "bs", label: "Balance Sheet" },
       { id: "ratios", label: "Ratio Analysis" },
+      { id: "leverage", label: "Leverage Ratios" },
       { id: "cashflow", label: "Cash Flow" },
       { id: "loan", label: "Loan Schedule" },
       { id: "eval", label: "Financial Evaluation" },
@@ -242,6 +243,9 @@ export default function Dashboard() {
 
             {/* ═══════════ RATIOS ═══════════ */}
             {activeTab === "ratios" && <RatiosSection ed={ed} verdict={v?.ratios} isLoadingVerdict={isLoadingVerdicts} />}
+
+            {/* ═══════════ LEVERAGE RATIOS & DEPRECIATION ═══════════ */}
+            {activeTab === "leverage" && <LeverageSection ed={ed} />}
 
             {/* ═══════════ CASH FLOW ═══════════ */}
             {activeTab === "cashflow" && <CashFlowSection ed={ed} verdict={v?.cashFlow} isLoadingVerdict={isLoadingVerdicts} />}
@@ -1370,6 +1374,217 @@ function RatioSummaryTable({ years, rows }: { years: string[]; rows: { label: st
         </Table>
       </div>
     </div>
+  );
+}
+
+function LeverageSection({ ed }: { ed: any }) {
+  const la = ed?.leverageAnalysis;
+  const ds = ed?.depreciationSchedule;
+
+  const has = (a: any): boolean => Array.isArray(a) && a.some((v: any) => typeof v === "number" && isFinite(v));
+  const at = (a: any, i: number): number | null => {
+    const v = a?.[i];
+    return typeof v === "number" && isFinite(v) ? v : null;
+  };
+  const shortFy = (y: string) => {
+    const m = y.match(/-(\d{2,4})$/);
+    return m ? `FY${m[1].slice(-2)}` : y;
+  };
+  const fy = (y: string) => `FY${y}`;
+
+  const lYears: string[] = Array.isArray(la?.years) ? la.years : [];
+  const hasLeverage = lYears.length > 0 && (has(la?.operatingLeverage) || has(la?.financialLeverage) || has(la?.combinedLeverage));
+
+  const dYears: string[] = Array.isArray(ds?.years) ? ds.years : [];
+  const hasDep = dYears.length > 0 && (has(ds?.openingWdv) || has(ds?.additions) || has(ds?.depreciation) || has(ds?.closingWdv));
+
+  if (!hasLeverage && !hasDep)
+    return (
+      <SectionPage>
+        <PageHeader eyebrow="Financials" title="Leverage Ratios & Depreciation" />
+        <EmptyState />
+      </SectionPage>
+    );
+
+  const fpi = lYears.length > 1 ? 1 : 0; // first full projected year (year 0 may be partial)
+  const fyTag = lYears.length ? shortFy(lYears[fpi]) : "";
+  const fyRange = lYears.length ? (lYears.length === 1 ? fy(lYears[0]) : `${fy(lYears[0])} to ${fy(lYears[lYears.length - 1])}`) : "";
+
+  // ── Headline leverage cards ──
+  const cards = [
+    { value: at(la?.operatingLeverage, fpi), label: `Operating Leverage (${fyTag})`, sub: "Contribution / EBIT", bg: "bg-blue-50", color: "text-blue-600" },
+    { value: at(la?.financialLeverage, fpi), label: `Financial Leverage (${fyTag})`, sub: "EBIT / EBT", bg: "bg-purple-50", color: "text-purple-600" },
+    { value: at(la?.combinedLeverage, fpi), label: `Combined Leverage (${fyTag})`, sub: "OL × FL", bg: "bg-orange-50", color: "text-orange-600" },
+  ].filter((c) => c.value != null);
+
+  // ── Chart dataset (shared by trend + bar) ──
+  const trendData = lYears.map((y, i) => ({
+    year: y,
+    "Operating Leverage": at(la?.operatingLeverage, i),
+    "Financial Leverage": at(la?.financialLeverage, i),
+    "Combined Leverage": at(la?.combinedLeverage, i),
+  }));
+
+  // ── Leverage summary rows ──
+  const fmtX = (n: number) => `${n.toFixed(2)}x`;
+  const levRows = [
+    { label: "Operating Leverage (OL)", values: la?.operatingLeverage, color: "text-blue-600" },
+    { label: "Financial Leverage (FL)", values: la?.financialLeverage, color: "text-purple-600" },
+    { label: "Combined Leverage (OL × FL)", values: la?.combinedLeverage, color: "text-orange-600" },
+  ].filter((r) => has(r.values));
+
+  // ── Depreciation schedule ──
+  const depRate = typeof ds?.ratePct === "number" && isFinite(ds.ratePct) ? ds.ratePct : null;
+  const depTitle = depRate != null ? `Depreciation Schedule (@ ${depRate}% WDV — Income Tax Act)` : "Depreciation Schedule (WDV — Income Tax Act)";
+  // Figures may arrive already in lakhs (e.g. 35.00) or in raw rupees (e.g.
+  // 975000). Auto-detect by magnitude and normalise everything to lakhs so the
+  // "(Lacs)" table always reads correctly regardless of how a DPR printed it.
+  const depNums: number[] = [ds?.openingWdv, ds?.additions, ds?.depreciation, ds?.closingWdv]
+    .flatMap((a: any) => (Array.isArray(a) ? a : []))
+    .filter((v: any) => typeof v === "number" && isFinite(v))
+    .map((v: number) => Math.abs(v));
+  const depScale = depNums.length && Math.max(...depNums) >= 1000 ? 1e5 : 1;
+  const toL = (n: number | null) => (n != null ? (n / depScale).toFixed(2) : "—");
+  const additionsArr: number[] = Array.isArray(ds?.additions) ? ds.additions.filter((v: any) => typeof v === "number" && isFinite(v)) : [];
+  const assetCost = additionsArr.length ? Math.max(...additionsArr) / depScale : null;
+  const depSubtitle = [ds?.assetName, assetCost != null ? `₹${assetCost.toFixed(2)}L (Lacs)` : null].filter(Boolean).join(" — ") || "Written-down-value method — figures in lacs";
+  const depRateLabel = depRate != null ? `Depreciation @${depRate}%` : "Depreciation";
+
+  return (
+    <SectionPage>
+      <PageHeader
+        eyebrow="Financials"
+        title="Leverage Ratios & Depreciation"
+        description={hasLeverage ? `Operating, Financial & Combined Leverage Analysis — ${fyRange}` : "Depreciation Schedule"}
+      />
+
+      {cards.length > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          {cards.map((c, i) => (
+            <div key={i} className={`rounded-2xl p-5 ${c.bg}`}>
+              <div className={`font-display text-[30px] leading-none num-tabular tracking-tight ${c.color}`}>{c.value!.toFixed(2)}</div>
+              <div className="text-[13px] font-semibold text-foreground mt-2">{c.label}</div>
+              <div className="text-[11.5px] text-muted-foreground mt-0.5">{c.sub}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {hasLeverage && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-6">
+          <DashCard title="Leverage Trends" subtitle="Operating, Financial & Combined leverage over time">
+            <div className="h-[260px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={trendData} margin={{ top: 8, right: 16, bottom: 0, left: -12 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(220 16% 92%)" vertical={false} />
+                  <XAxis dataKey="year" tick={axisTick} axisLine={false} tickLine={false} />
+                  <YAxis tick={axisTick} axisLine={false} tickLine={false} width={36} />
+                  <RechartsTooltip contentStyle={tooltipStyle} formatter={(v: any) => `${Number(v).toFixed(2)}×`} />
+                  <Legend wrapperStyle={{ fontSize: 12 }} iconType="plainline" />
+                  <Line type="monotone" dataKey="Operating Leverage" stroke={NAVY} strokeWidth={2.5} dot={{ r: 3, fill: NAVY }} connectNulls />
+                  <Line type="monotone" dataKey="Financial Leverage" stroke={PURPLE} strokeWidth={2.5} dot={{ r: 3, fill: PURPLE }} connectNulls />
+                  <Line type="monotone" dataKey="Combined Leverage" stroke={GOLD} strokeWidth={2.5} dot={{ r: 3, fill: GOLD }} connectNulls />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </DashCard>
+
+          <DashCard title="Combined Leverage Bar Chart" subtitle="Operating, Financial & Combined leverage by year">
+            <div className="h-[260px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={trendData} margin={{ top: 8, right: 16, bottom: 0, left: -12 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(220 16% 92%)" vertical={false} />
+                  <XAxis dataKey="year" tick={axisTick} axisLine={false} tickLine={false} />
+                  <YAxis tick={axisTick} axisLine={false} tickLine={false} width={36} />
+                  <RechartsTooltip contentStyle={tooltipStyle} cursor={{ fill: "hsl(221 83% 53% / 0.06)" }} formatter={(v: any) => `${Number(v).toFixed(2)}×`} />
+                  <Legend wrapperStyle={{ fontSize: 12 }} />
+                  <Bar dataKey="Operating Leverage" fill={NAVY} radius={[3, 3, 0, 0]} maxBarSize={22} />
+                  <Bar dataKey="Financial Leverage" fill={PURPLE} radius={[3, 3, 0, 0]} maxBarSize={22} />
+                  <Bar dataKey="Combined Leverage" fill={GOLD} radius={[3, 3, 0, 0]} maxBarSize={22} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </DashCard>
+        </div>
+      )}
+
+      {levRows.length > 0 && (
+        <div className="mb-6">
+          <h3 className="font-display text-[18px] mb-3">Leverage Ratio Summary</h3>
+          <div className="surface-card rounded-2xl overflow-hidden">
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-primary hover:bg-primary border-0">
+                    <TableHead className="text-eyebrow text-white/85 py-3.5 sticky left-0 bg-primary z-10">Leverage Type</TableHead>
+                    {lYears.map((y) => (
+                      <TableHead key={y} className="text-eyebrow text-white/85 text-right num-tabular">{y}</TableHead>
+                    ))}
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {levRows.map((row, ri) => {
+                    const rowBg = ri % 2 === 1 ? "bg-muted/40" : "bg-card";
+                    return (
+                      <TableRow key={row.label} className={`border-border ${rowBg} hover:${rowBg}`}>
+                        <TableCell className={`text-[13px] font-medium text-foreground sticky left-0 z-10 ${rowBg}`}>{row.label}</TableCell>
+                        {lYears.map((_, i) => {
+                          const val = at(row.values, i);
+                          return (
+                            <TableCell key={i} className={`text-right num-tabular text-[13px] font-medium ${row.color}`}>
+                              {val != null ? fmtX(val) : "—"}
+                            </TableCell>
+                          );
+                        })}
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          </div>
+          <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-[12.5px] text-amber-900/90 leading-relaxed">
+            <span className="font-semibold">Note:</span> A high OL and low FL indicates management is careful — the higher risk of OL has been balanced by low FL. The ideal scenario is low OL and high FL for stable earnings.
+          </div>
+        </div>
+      )}
+
+      {hasDep && (
+        <div>
+          <h3 className="font-display text-[18px] mb-1">{depTitle}</h3>
+          <p className="text-[12px] text-muted-foreground mb-3">{depSubtitle}</p>
+          <div className="surface-card rounded-2xl overflow-hidden">
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-primary hover:bg-primary border-0">
+                    <TableHead className="text-eyebrow text-white/85 py-3.5">Year</TableHead>
+                    <TableHead className="text-eyebrow text-white/85 text-right">WDV (Opening)</TableHead>
+                    <TableHead className="text-eyebrow text-white/85 text-right">Additions</TableHead>
+                    <TableHead className="text-eyebrow text-white/85 text-right">{depRateLabel}</TableHead>
+                    <TableHead className="text-eyebrow text-white/85 text-right">WDV (Closing)</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {dYears.map((y, i) => {
+                    const rowBg = i % 2 === 1 ? "bg-muted/40" : "bg-card";
+                    return (
+                      <TableRow key={y} className={`border-border ${rowBg} hover:${rowBg}`}>
+                        <TableCell className="text-[13px] font-medium text-foreground">{y}</TableCell>
+                        <TableCell className="text-right num-tabular text-[13px] text-foreground/80">{toL(at(ds?.openingWdv, i))}</TableCell>
+                        <TableCell className="text-right num-tabular text-[13px] text-blue-600">{toL(at(ds?.additions, i))}</TableCell>
+                        <TableCell className="text-right num-tabular text-[13px] text-rose-600">{toL(at(ds?.depreciation, i))}</TableCell>
+                        <TableCell className="text-right num-tabular text-[13px] text-emerald-600 font-medium">{toL(at(ds?.closingWdv, i))}</TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          </div>
+        </div>
+      )}
+    </SectionPage>
   );
 }
 

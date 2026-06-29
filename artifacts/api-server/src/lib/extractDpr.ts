@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { jsonrepair } from "jsonrepair";
 import { logger } from "./logger";
 
 const client = new Anthropic({
@@ -37,6 +38,8 @@ CRITICAL RULES:
    - Activity: debtorsTurnover (debtors turnover ratio), debtorsCollectionDays (debtors collection period in days).
    - Leverage & solvency: tolTw (total outside liabilities / total net worth), proprietaryRatio (net worth / total assets), debtEquityRatio.
    - Use values exactly as printed; set any ratio absent from the document to null.
+9. For leverageAnalysis (often titled "Leverage Ratio Analysis" / "Calculation of Operating/Financial/Combined Leverage"), capture one value per projected year, every array the same length as "years": operatingLeverage (OL = Contribution / EBIT), financialLeverage (FL = EBIT / EBT), combinedLeverage (CL = OL × FL). Use values exactly as printed; set an absent series to null.
+10. For depreciationSchedule (the "Depreciation Schedule", normally the written-down-value (WDV) method under the Income Tax Act, figures in lakhs): assetName (e.g. "Plant & Machinery"), ratePct (depreciation rate as a number, e.g. 15 for 15%), method (e.g. "WDV — Income Tax Act"), years[], and per-year arrays openingWdv (WDV at beginning of year), additions (additions during the year), depreciation (depreciation charged for the year), closingWdv (WDV at year end). Use values exactly as printed; set any absent field to null.
 
 Extract the following structure:
 {
@@ -126,6 +129,22 @@ Extract the following structure:
     "debtEquityRatio": (number|null)[],
     "returnOnEquity": (number|null)[]
   },
+  "leverageAnalysis": {
+    "years": string[],
+    "operatingLeverage": (number|null)[],
+    "financialLeverage": (number|null)[],
+    "combinedLeverage": (number|null)[]
+  },
+  "depreciationSchedule": {
+    "assetName": string|null,
+    "ratePct": number|null,
+    "method": string|null,
+    "years": string[],
+    "openingWdv": (number|null)[],
+    "additions": (number|null)[],
+    "depreciation": (number|null)[],
+    "closingWdv": (number|null)[]
+  },
   "cashFlow": {
     "years": string[],
     "operatingCashFlow": (number|null)[],
@@ -198,6 +217,21 @@ function extractJsonFromText(text: string): string {
   return t;
 }
 
+/**
+ * Parse JSON emitted by the model. The happy path is a plain `JSON.parse`; when
+ * that fails we run `jsonrepair`, which fixes the malformations LLMs commonly
+ * produce on large payloads (leading-zero numbers like `075206`, missing or
+ * trailing commas, unquoted keys) and parse the repaired text. This keeps the
+ * fast path untouched while making extraction resilient to occasional defects.
+ */
+function parseLlmJson(jsonText: string): unknown {
+  try {
+    return JSON.parse(jsonText);
+  } catch {
+    return JSON.parse(jsonrepair(jsonText));
+  }
+}
+
 export async function extractDprData(rawText: string): Promise<Record<string, unknown>> {
   logger.info({ textLength: rawText.length }, "Starting DPR extraction via Anthropic Claude");
 
@@ -221,7 +255,7 @@ export async function extractDprData(rawText: string): Promise<Record<string, un
 
   const jsonText = extractJsonFromText(content.text);
   try {
-    const parsed = JSON.parse(jsonText);
+    const parsed = parseLlmJson(jsonText) as Record<string, unknown>;
     logger.info("DPR extraction completed successfully");
     return parsed;
   } catch (err) {
@@ -271,7 +305,12 @@ ${dataStr}`,
 
   const jsonText = extractJsonFromText(content.text);
   try {
-    const parsed = JSON.parse(jsonText);
+    const parsed = parseLlmJson(jsonText) as {
+      summary: string;
+      keyStrengths: string[];
+      riskFactors: string[];
+      viabilityVerdict: string;
+    };
     logger.info("Executive summary generated");
     return parsed;
   } catch (err) {
@@ -340,7 +379,7 @@ ${dataStr}`,
   const jsonText = extractJsonFromText(content.text);
   let parsed: Partial<SectionVerdictMap>;
   try {
-    parsed = JSON.parse(jsonText) as Partial<SectionVerdictMap>;
+    parsed = parseLlmJson(jsonText) as Partial<SectionVerdictMap>;
   } catch (err) {
     logger.error({ err, snippet: jsonText.slice(0, 500) }, "Failed to parse verdicts JSON");
     throw new Error(`AI returned invalid JSON: ${(err as Error).message}`);

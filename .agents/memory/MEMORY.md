@@ -2,3 +2,4 @@
 - [Finvois data units](finvois-data-units.md) — plAccount/cashFlow line items are raw rupees; projectCost/financialSummary are lakhs. Normalise before charting together.
 - [Finvois extraction flow](finvois-extraction-flow.md) — extractedData is raw jsonb returned with no Zod stripping; add a prompt field + POST /reports/:id/retry to backfill, no codegen needed.
 - [Finvois ratio percent normalization](finvois-ratio-percent-normalization.md) — ratios stored as-printed; dashboard scales a percent series ×100 only when every value ≤1; proprietaryRatio never scaled.
+- [Finvois LLM JSON repair](finvois-llm-json-repair.md) — parse all Claude JSON via parseLlmJson (JSON.parse then jsonrepair fallback); large DPRs emit leading-zero/missing-comma defects.
