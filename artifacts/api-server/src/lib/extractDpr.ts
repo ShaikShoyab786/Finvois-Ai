@@ -23,6 +23,14 @@ CRITICAL RULES:
    - Interest split: interestTermLoan, interestCCLoan (cash-credit / working-capital interest).
    - Use values exactly as printed; set any line absent from the document to null. Keep every array the same length as "years".
    - periodNote: any note about a partial first year (e.g. "FY2025-26: September to March (7 months)"), else null.
+7. For balanceSheet, capture the full Projected Balance Sheet line-by-line when present:
+   - Sources of funds: netCapital (Net Capital = Opening + Net Profit − Drawings, a.k.a. own capital / net worth / equity), termLoans (term loan outstanding).
+   - Current liabilities: workingCapitalLoan (WC / cash-credit loan), shortTermLoan, and currentLiabilities (total current liabilities).
+   - Application of funds: fixedAssets (Fixed Assets at WDV / net block).
+   - Current assets: closingStock (closing stock / inventory), receivables (receivables / debtors / sundry debtors), cashEquivalents (cash & cash equivalents / bank balance), and currentAssets (total current assets).
+   - Totals: totalFunds (total sources), totalAssets (total application), netWorkingCapital (current assets − current liabilities).
+   - Keep equity == netCapital and longTermLiabilities == termLoans for compatibility. Use values exactly as printed; set any line absent to null. Keep every array the same length as "years".
+   - periodNote: any note about a partial first year (e.g. "FY2025-26: September to March (7 months)"), else null.
 
 Extract the following structure:
 {
@@ -79,11 +87,22 @@ Extract the following structure:
   },
   "balanceSheet": {
     "years": string[],
-    "currentAssets": (number|null)[],
-    "fixedAssets": (number|null)[],
+    "netCapital": (number|null)[],
+    "termLoans": (number|null)[],
+    "workingCapitalLoan": (number|null)[],
+    "shortTermLoan": (number|null)[],
     "currentLiabilities": (number|null)[],
+    "totalFunds": (number|null)[],
+    "fixedAssets": (number|null)[],
+    "closingStock": (number|null)[],
+    "receivables": (number|null)[],
+    "cashEquivalents": (number|null)[],
+    "currentAssets": (number|null)[],
+    "totalAssets": (number|null)[],
+    "netWorkingCapital": (number|null)[],
+    "equity": (number|null)[],
     "longTermLiabilities": (number|null)[],
-    "equity": (number|null)[]
+    "periodNote": string|null
   },
   "ratioAnalysis": {
     "years": string[],

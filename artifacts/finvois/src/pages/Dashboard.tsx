@@ -35,8 +35,6 @@ import { ChartFrame } from "@/components/report/ChartFrame";
 import { MetricCard } from "@/components/report/MetricCard";
 import { DataTable } from "@/components/report/DataTable";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { WorkingCapitalChart } from "@/components/report/WorkingCapitalChart";
-import { CapitalStructureChart } from "@/components/report/CapitalStructureChart";
 import { DscrAmortizationChart } from "@/components/report/DscrAmortizationChart";
 import { SectionVerdict } from "@/components/report/SectionVerdict";
 import { ThresholdGauge, parseNumeric } from "@/components/report/ThresholdGauge";
@@ -48,8 +46,6 @@ import {
   insightLoan,
   meanFinite,
   insightFinancialSnapshot,
-  insightWorkingCapital,
-  insightCapitalStructure,
   insightDscrAmortization,
 } from "@/lib/insights";
 import { ArrowRight } from "lucide-react";
@@ -529,7 +525,7 @@ const SKY = "hsl(199 89% 70%)";
 const fmtRsFull = (n: number): string =>
   new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 }).format(n);
 
-type PLRowKind = "header" | "normal" | "sub" | "strong" | "total" | "grand";
+type PLRowKind = "header" | "subheader" | "normal" | "sub" | "strong" | "total" | "grand";
 interface PLRow {
   label: string;
   values?: (number | null)[];
@@ -562,6 +558,15 @@ function PLStatementTable({ years, rows }: { years: string[]; rows: PLRow[] }) {
                 return (
                   <TableRow key={`${row.label}-${ri}`} className="border-border bg-muted/60 hover:bg-muted/60">
                     <TableCell colSpan={span} className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-muted-foreground py-2 sticky left-0 bg-muted/60 z-10">
+                      {row.label}
+                    </TableCell>
+                  </TableRow>
+                );
+              }
+              if (row.kind === "subheader") {
+                return (
+                  <TableRow key={`${row.label}-${ri}`} className="border-border bg-card hover:bg-card">
+                    <TableCell colSpan={span} className="text-[12px] italic text-muted-foreground/75 py-1.5 pl-4 sticky left-0 bg-card z-10">
                       {row.label}
                     </TableCell>
                   </TableRow>
@@ -823,80 +828,200 @@ function BalanceSheetSection({ ed, verdict, isLoadingVerdict }: { ed: any; verdi
     </SectionPage>
   );
 
-  const chartData = bs.years.map((y: string, i: number) => ({
+  const years: string[] = bs.years;
+  const at = (a: any, i: number): number | null => {
+    const v = a?.[i];
+    return typeof v === "number" && isFinite(v) ? v : null;
+  };
+  const has = (a: any): boolean => Array.isArray(a) && a.some((v: any) => typeof v === "number" && isFinite(v));
+  const sumRows = (...arrs: any[]): (number | null)[] =>
+    years.map((_, i) => {
+      let any = false;
+      let s = 0;
+      for (const a of arrs) {
+        const v = at(a, i);
+        if (v != null) { any = true; s += v; }
+      }
+      return any ? s : null;
+    });
+
+  // Prefer explicit extracted lines, fall back to legacy equivalents — never fabricate.
+  const netCapital = has(bs.netCapital) ? bs.netCapital : bs.equity;
+  const termLoans = has(bs.termLoans) ? bs.termLoans : bs.longTermLiabilities;
+  const totalFunds = has(bs.totalFunds) ? bs.totalFunds : sumRows(netCapital, termLoans, bs.currentLiabilities);
+  const totalAssets = has(bs.totalAssets) ? bs.totalAssets : sumRows(bs.fixedAssets, bs.currentAssets);
+  const netWorkingCapital = has(bs.netWorkingCapital)
+    ? bs.netWorkingCapital
+    : years.map((_, i) => {
+        const ca = at(bs.currentAssets, i), cl = at(bs.currentLiabilities, i);
+        return ca != null && cl != null ? ca - cl : null;
+      });
+
+  // ── Chart 1: Sources vs Application of Funds (₹ in Lakhs) ──
+  const svaData = years.map((y, i) => ({
     year: y,
-    "Current Assets": bs.currentAssets?.[i] || 0,
-    "Fixed Assets": bs.fixedAssets?.[i] || 0,
-    "Current Liab.": -(bs.currentLiabilities?.[i] || 0),
-    "Long-term Liab.": -(bs.longTermLiabilities?.[i] || 0),
-    Equity: -(bs.equity?.[i] || 0),
+    "Net Capital": at(netCapital, i),
+    "Current Assets": at(bs.currentAssets, i),
+    "Fixed Assets": at(bs.fixedAssets, i),
+    "Term Loans": at(termLoans, i),
   }));
+  const hasSva = svaData.some((d) => d["Net Capital"] != null || d["Current Assets"] != null || d["Fixed Assets"] != null || d["Term Loans"] != null);
+  const svaMax = Math.max(0, ...svaData.flatMap((d) => [d["Net Capital"], d["Current Assets"], d["Fixed Assets"], d["Term Loans"]].map((x) => (x == null ? 0 : Math.abs(x)))));
+  const fmtSvaL = lakhFormatter(svaMax);
+
+  // ── Chart 2: Current Assets Composition (stacked, ₹ in Lakhs) ──
+  const caComp = years.map((y, i) => ({
+    year: y,
+    Stock: at(bs.closingStock, i),
+    Debtors: at(bs.receivables, i),
+    Cash: at(bs.cashEquivalents, i),
+  }));
+  const hasCaComp = caComp.some((d) => d.Stock != null || d.Debtors != null || d.Cash != null);
+  const caMax = Math.max(0, ...caComp.map((d) => [d.Stock, d.Debtors, d.Cash].reduce<number>((s, x) => s + (x || 0), 0)));
+  const fmtCaL = lakhFormatter(caMax);
+
+  // ── Detailed Projected Balance Sheet rows (only what exists) ──
+  const rows: PLRow[] = [];
+  if (has(netCapital) || has(termLoans) || has(bs.currentLiabilities) || has(bs.workingCapitalLoan) || has(bs.shortTermLoan)) {
+    rows.push({ label: "Sources of Funds", kind: "header" });
+    if (has(netCapital)) rows.push({ label: "Net Capital (Opening + Net Profit − Drawings)", values: netCapital, kind: "strong" });
+    if (has(termLoans)) rows.push({ label: "Term Loans", values: termLoans, kind: "normal" });
+    const clSub = [
+      { label: "Working Capital Loan", arr: bs.workingCapitalLoan },
+      { label: "Short Term Loan", arr: bs.shortTermLoan },
+    ].filter((r) => has(r.arr));
+    if (clSub.length) {
+      rows.push({ label: "Current Liabilities", kind: "subheader" });
+      clSub.forEach((r) => rows.push({ label: r.label, values: r.arr, kind: "sub" }));
+    } else if (has(bs.currentLiabilities)) {
+      rows.push({ label: "Current Liabilities", values: bs.currentLiabilities, kind: "normal" });
+    }
+    if (has(totalFunds)) rows.push({ label: "Total Funds", values: totalFunds, kind: "total" });
+  }
+  if (has(bs.fixedAssets) || has(bs.currentAssets) || has(bs.closingStock) || has(bs.receivables) || has(bs.cashEquivalents)) {
+    rows.push({ label: "Application of Funds", kind: "header" });
+    if (has(bs.fixedAssets)) rows.push({ label: "Fixed Assets (WDV)", values: bs.fixedAssets, kind: "strong" });
+    const caSub = [
+      { label: "Closing Stock", arr: bs.closingStock },
+      { label: "Receivables / Debtors", arr: bs.receivables },
+      { label: "Cash & Cash Equivalents", arr: bs.cashEquivalents },
+    ].filter((r) => has(r.arr));
+    if (caSub.length) {
+      rows.push({ label: "Current Assets", kind: "subheader" });
+      caSub.forEach((r) => rows.push({ label: r.label, values: r.arr, kind: "sub" }));
+    } else if (has(bs.currentAssets)) {
+      rows.push({ label: "Current Assets", values: bs.currentAssets, kind: "normal" });
+    }
+    if (has(totalAssets)) rows.push({ label: "Total Assets", values: totalAssets, kind: "total" });
+    if (has(netWorkingCapital)) rows.push({ label: "Net Working Capital", values: netWorkingCapital, kind: "strong" });
+  }
+
+  // ── Derived headline metric cards (render each only when its data exists) ──
+  const fy = (y: string) => `FY${y}`;
+  const shortFy = (y: string) => {
+    const m = y.match(/-(\d{2,4})$/);
+    return m ? `FY${m[1].slice(-2)}` : y;
+  };
+  const fpi = years.length > 1 ? 1 : 0; // first full projected year (year 0 may be a partial stub)
+  const lpi = years.length - 1;
+  const cards: { value: string; label: string; sub: string; bg: string; val: string }[] = [];
+  const ncFp = at(netCapital, fpi);
+  if (ncFp != null) cards.push({ value: fmtRupeesL(ncFp / 1e5), label: `Net Capital (${shortFy(years[fpi])})`, sub: "Equity buildup", bg: "bg-emerald-50 border-emerald-200", val: "text-emerald-700" });
+  const ncLp = at(netCapital, lpi);
+  if (ncLp != null && lpi !== fpi) cards.push({ value: fmtRupeesL(ncLp / 1e5), label: `Net Capital (${shortFy(years[lpi])})`, sub: `${years.length}-yr growth`, bg: "bg-emerald-50 border-emerald-200", val: "text-emerald-700" });
+  const nwcFp = at(netWorkingCapital, fpi);
+  if (nwcFp != null) cards.push({ value: fmtRupeesL(nwcFp / 1e5), label: `Net Working Cap (${shortFy(years[fpi])})`, sub: "Liquidity position", bg: "bg-blue-50 border-blue-200", val: "text-blue-700" });
+  // Term loan fully repaid: first year the balance hits zero after having been positive.
+  if (has(termLoans)) {
+    let repaidIdx = -1;
+    let sawPositive = false;
+    for (let i = 0; i < years.length; i++) {
+      const v = at(termLoans, i);
+      if (v != null && v > 0) sawPositive = true;
+      if (sawPositive && v === 0) { repaidIdx = i; break; }
+    }
+    if (repaidIdx >= 0) cards.push({ value: fy(years[repaidIdx]), label: "Loan Fully Repaid", sub: "Term loan cleared", bg: "bg-purple-50 border-purple-200", val: "text-purple-700" });
+  }
+
+  const fyRange = years.length === 1 ? fy(years[0]) : `${fy(years[0])} to ${fy(years[lpi])}`;
   const insight = insightBalanceSheet(bs);
 
   return (
     <SectionPage>
-      <PageHeader eyebrow="Financials" title="Balance Sheet" description="Assets above, liabilities and equity below — the project's capital structure over time." />
+      <PageHeader eyebrow="Financials" title="Balance Sheet" description={`Projected Balance Sheet — ${fyRange} (₹)`} />
       <SectionVerdict verdict={verdict} isLoading={isLoadingVerdict} />
 
-      <ChartFrame
-        eyebrow="Capital Structure"
-        title="Assets vs Liabilities & Equity"
-        description="Stacked composition with assets above the axis and funding sources below."
-        chartHeight={400}
-        footer={<InsightCaption text={insight} />}
-      >
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={chartData} stackOffset="sign" margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
-            <CartesianGrid vertical={false} stroke="hsl(220 16% 90%)" />
-            <XAxis dataKey="year" tick={axisTick} axisLine={false} tickLine={false} />
-            <YAxis tick={axisTick} axisLine={false} tickLine={false} tickFormatter={(v) => Math.abs(v).toString()} />
-            <RechartsTooltip contentStyle={tooltipStyle} formatter={(v: number) => Math.abs(v).toFixed(2)} />
-            <Legend wrapperStyle={{ fontSize: 12, paddingTop: 12 }} iconType="circle" />
-            <Bar dataKey="Current Assets" stackId="a" fill={NAVY_LIGHT} radius={[0, 0, 0, 0]} maxBarSize={36} />
-            <Bar dataKey="Fixed Assets" stackId="a" fill={NAVY} radius={[4, 4, 0, 0]} maxBarSize={36} />
-            <Bar dataKey="Current Liab." stackId="b" fill="hsl(262 45% 78%)" radius={[0, 0, 0, 0]} maxBarSize={36} />
-            <Bar dataKey="Long-term Liab." stackId="b" fill="hsl(262 55% 64%)" radius={[0, 0, 0, 0]} maxBarSize={36} />
-            <Bar dataKey="Equity" stackId="b" fill={GOLD} radius={[0, 0, 4, 4]} maxBarSize={36} />
-          </BarChart>
-        </ResponsiveContainer>
-      </ChartFrame>
+      {(hasSva || hasCaComp) && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-6">
+          {hasSva && (
+            <DashCard title="Sources vs Application of Funds" subtitle="Capital deployment over time (₹ in Lakhs)">
+              <div className="h-[300px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <ComposedChart data={svaData} margin={{ top: 8, right: 12, bottom: 0, left: -8 }}>
+                    <defs>
+                      <linearGradient id="bsNetCapFill" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor={EMERALD} stopOpacity={0.18} />
+                        <stop offset="100%" stopColor={EMERALD} stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(220 16% 92%)" vertical={false} />
+                    <XAxis dataKey="year" tick={axisTick} axisLine={false} tickLine={false} />
+                    <YAxis tick={axisTick} axisLine={false} tickLine={false} tickFormatter={fmtSvaL} width={48} />
+                    <RechartsTooltip contentStyle={tooltipStyle} cursor={{ stroke: "hsl(221 83% 53% / 0.2)" }} formatter={(val: any) => fmtINR(Number(val))} />
+                    <Legend wrapperStyle={{ fontSize: 12 }} iconType="plainline" />
+                    <Area type="monotone" dataKey="Net Capital" stroke={EMERALD} strokeWidth={2.5} fill="url(#bsNetCapFill)" dot={false} connectNulls />
+                    <Line type="monotone" dataKey="Current Assets" stroke={NAVY} strokeWidth={2.5} dot={false} connectNulls />
+                    <Line type="monotone" dataKey="Fixed Assets" stroke={GOLD} strokeWidth={2} strokeDasharray="5 4" dot={false} connectNulls />
+                    <Line type="monotone" dataKey="Term Loans" stroke={ROSE} strokeWidth={2} strokeDasharray="5 4" dot={false} connectNulls />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </div>
+            </DashCard>
+          )}
 
-      {/* Layer 2b — short-term solvency: working capital position */}
-      <div className="h-6" />
-      <ChartFrame
-        eyebrow="Short-Term Health"
-        title="Working capital position"
-        description="Current assets vs current liabilities each year; the line traces the resulting working capital."
-        chartHeight={320}
-        footer={<InsightCaption text={insightWorkingCapital(bs)} />}
-      >
-        <WorkingCapitalChart bs={bs} />
-      </ChartFrame>
+          {hasCaComp && (
+            <DashCard title="Current Assets Composition" subtitle="Stock, debtors & cash (₹ in Lakhs)">
+              <div className="h-[300px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={caComp} margin={{ top: 8, right: 12, bottom: 0, left: -8 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(220 16% 92%)" vertical={false} />
+                    <XAxis dataKey="year" tick={axisTick} axisLine={false} tickLine={false} />
+                    <YAxis tick={axisTick} axisLine={false} tickLine={false} tickFormatter={fmtCaL} width={48} />
+                    <RechartsTooltip contentStyle={tooltipStyle} cursor={{ fill: "hsl(221 83% 53% / 0.05)" }} formatter={(val: any) => fmtINR(Number(val))} />
+                    <Legend wrapperStyle={{ fontSize: 12 }} iconType="circle" />
+                    <Bar dataKey="Stock" stackId="ca" fill={GOLD} maxBarSize={40} />
+                    <Bar dataKey="Debtors" stackId="ca" fill={NAVY} maxBarSize={40} />
+                    <Bar dataKey="Cash" stackId="ca" fill={EMERALD} radius={[4, 4, 0, 0]} maxBarSize={40} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </DashCard>
+          )}
+        </div>
+      )}
 
-      {/* Layer 2c — long-term health: capital structure mix evolution */}
-      <div className="h-6" />
-      <ChartFrame
-        eyebrow="Long-Term Health"
-        title="Capital structure evolution"
-        description="Funding mix as a percentage — does the project deleverage as debt is paid down?"
-        chartHeight={320}
-        footer={<InsightCaption text={insightCapitalStructure(bs)} />}
-      >
-        <CapitalStructureChart bs={bs} />
-      </ChartFrame>
+      {rows.length > 0 && (
+        <div className="mb-3">
+          <h3 className="font-display text-[18px] mb-3">Projected Balance Sheet</h3>
+          <PLStatementTable years={years} rows={rows} />
+          {insight && <p className="text-[12px] text-muted-foreground mt-2">{insight}</p>}
+          {typeof bs.periodNote === "string" && bs.periodNote.trim() && (
+            <p className="text-[11.5px] text-muted-foreground/80 mt-1">* {bs.periodNote}</p>
+          )}
+        </div>
+      )}
 
-      <div className="mt-6">
-        <DataTable
-          years={bs.years}
-          rows={[
-            { label: "Current Assets", values: bs.currentAssets || [] },
-            { label: "Fixed Assets", values: bs.fixedAssets || [] },
-            { label: "Current Liabilities", values: bs.currentLiabilities || [] },
-            { label: "Long-term Liabilities", values: bs.longTermLiabilities || [] },
-            { label: "Equity", values: bs.equity || [], emphasis: true },
-          ]}
-        />
-      </div>
+      {cards.length > 0 && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-8">
+          {cards.map((c, i) => (
+            <div key={i} className={`rounded-2xl border p-5 ${c.bg}`}>
+              <div className={`font-display text-[24px] leading-tight num-tabular tracking-tight ${c.val}`}>{c.value}</div>
+              <div className="text-[13px] font-medium text-foreground mt-1">{c.label}</div>
+              <div className="text-[11.5px] text-muted-foreground mt-0.5">{c.sub}</div>
+            </div>
+          ))}
+        </div>
+      )}
     </SectionPage>
   );
 }
