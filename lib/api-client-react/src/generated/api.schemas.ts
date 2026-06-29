@@ -112,9 +112,25 @@ export interface RatioAnalysis {
 
 export interface CashFlow {
   years?: string[];
+  profitBeforeInterestTax?: (number | null)[];
+  depreciation?: (number | null)[];
+  increaseInTermLoan?: (number | null)[];
+  increaseInWcLoan?: (number | null)[];
+  increaseInCapital?: (number | null)[];
+  increaseInCapitalDuringYear?: (number | null)[];
+  totalInflows?: (number | null)[];
+  capitalExpenditure?: (number | null)[];
+  termLoanInterest?: (number | null)[];
+  ccLoanInterest?: (number | null)[];
+  termLoanRepayment?: (number | null)[];
+  increaseInReceivables?: (number | null)[];
+  increaseInStock?: (number | null)[];
+  totalOutflows?: (number | null)[];
+  grossSurplus?: (number | null)[];
+  drawings?: (number | null)[];
+  openingBalance?: (number | null)[];
+  closingBalance?: (number | null)[];
   operatingCashFlow?: (number | null)[];
-  investingCashFlow?: (number | null)[];
-  financingCashFlow?: (number | null)[];
   netCashFlow?: (number | null)[];
 }
 

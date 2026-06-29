@@ -408,15 +408,79 @@ components:
           type: array
           items:
             type: string
+        profitBeforeInterestTax:
+          type: array
+          items:
+            type: ["number", "null"]
+        depreciation:
+          type: array
+          items:
+            type: ["number", "null"]
+        increaseInTermLoan:
+          type: array
+          items:
+            type: ["number", "null"]
+        increaseInWcLoan:
+          type: array
+          items:
+            type: ["number", "null"]
+        increaseInCapital:
+          type: array
+          items:
+            type: ["number", "null"]
+        increaseInCapitalDuringYear:
+          type: array
+          items:
+            type: ["number", "null"]
+        totalInflows:
+          type: array
+          items:
+            type: ["number", "null"]
+        capitalExpenditure:
+          type: array
+          items:
+            type: ["number", "null"]
+        termLoanInterest:
+          type: array
+          items:
+            type: ["number", "null"]
+        ccLoanInterest:
+          type: array
+          items:
+            type: ["number", "null"]
+        termLoanRepayment:
+          type: array
+          items:
+            type: ["number", "null"]
+        increaseInReceivables:
+          type: array
+          items:
+            type: ["number", "null"]
+        increaseInStock:
+          type: array
+          items:
+            type: ["number", "null"]
+        totalOutflows:
+          type: array
+          items:
+            type: ["number", "null"]
+        grossSurplus:
+          type: array
+          items:
+            type: ["number", "null"]
+        drawings:
+          type: array
+          items:
+            type: ["number", "null"]
+        openingBalance:
+          type: array
+          items:
+            type: ["number", "null"]
+        closingBalance:
+          type: array
+          items:
+            type: ["number", "null"]
         operatingCashFlow:
-          type: array
-          items:
-            type: ["number", "null"]
-        investingCashFlow:
-          type: array
-          items:
-            type: ["number", "null"]
-        financingCashFlow:
           type: array
           items:
             type: ["number", "null"]

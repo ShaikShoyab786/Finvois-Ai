@@ -9,6 +9,10 @@ Within a single report's `extractedData`:
 
 - `plAccount` (revenue, grossProfit, netProfit, …), `cashFlow`, and balance-sheet
   line items are extracted in **raw rupees** (e.g. revenue `4330000` = ₹43.3 lakhs).
+  `cashFlow` is the full Projected Cash Flow Statement (totalInflows, totalOutflows,
+  grossSurplus, drawings, openingBalance, closingBalance, plus per-line inflow/outflow
+  items); legacy `operatingCashFlow`/`netCashFlow` kept for the overview + DSCR chart,
+  with `netCashFlow == grossSurplus`. All in raw rupees.
 - `projectCost.totalCost` and `financialSummary` figures (termLoan, equityCapital,
   totalProjectCost) are already in **lakhs** (e.g. `10.25` = ₹10.25 lakhs).
 

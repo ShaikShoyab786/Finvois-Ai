@@ -42,7 +42,6 @@ import { ThresholdGauge, parseNumeric } from "@/components/report/ThresholdGauge
 import {
   insightPL,
   insightBalanceSheet,
-  insightCashFlow,
   insightRatios,
   insightLoan,
   meanFinite,
@@ -1035,59 +1034,293 @@ function CashFlowSection({ ed, verdict, isLoadingVerdict }: { ed: any; verdict?:
   const cf = ed?.cashFlow;
   if (!cf?.years?.length) return (
     <SectionPage>
-      <PageHeader eyebrow="Financials" title="Cash Flow" />
+      <PageHeader eyebrow="Financials" title="Projected Cash Flow Statement" />
       <SectionVerdict verdict={verdict} isLoading={isLoadingVerdict} />
       <EmptyState />
     </SectionPage>
   );
 
-  const chartData = cf.years.map((y: string, i: number) => ({
+  const years: string[] = cf.years;
+  const n = years.length;
+  const num = (v: any): number | null => (typeof v === "number" && isFinite(v) ? v : null);
+  const has = (a: any): boolean => Array.isArray(a) && a.some((v: any) => num(v) != null);
+  const at = (a: any, i: number): number | null => num(a?.[i]);
+  const sum = (a: any): number | null => {
+    if (!Array.isArray(a)) return null;
+    let s = 0, any = false;
+    for (const v of a) { const x = num(v); if (x != null) { s += x; any = true; } }
+    return any ? s : null;
+  };
+  const lastFinite = (a: any): number | null => {
+    if (!Array.isArray(a)) return null;
+    for (let i = a.length - 1; i >= 0; i--) { const x = num(a[i]); if (x != null) return x; }
+    return null;
+  };
+  const shortFy = (y: string) => {
+    const m = y.match(/(\d{2,4})$/);
+    return m ? `FY${m[1].slice(-2)}` : y;
+  };
+
+  // Figures arrive in raw rupees (e.g. 1307440) or, rarely, already in lakhs.
+  // Auto-detect by magnitude so every chart/card reads in lakhs (₹L).
+  const allNums: number[] = [
+    cf.profitBeforeInterestTax, cf.depreciation, cf.increaseInTermLoan, cf.increaseInWcLoan,
+    cf.increaseInCapital, cf.increaseInCapitalDuringYear, cf.totalInflows, cf.capitalExpenditure,
+    cf.termLoanInterest, cf.ccLoanInterest, cf.termLoanRepayment, cf.increaseInReceivables,
+    cf.increaseInStock, cf.totalOutflows, cf.grossSurplus, cf.drawings, cf.openingBalance,
+    cf.closingBalance, cf.netCashFlow,
+  ]
+    .flatMap((a: any) => (Array.isArray(a) ? a : []))
+    .map((v: any) => num(v))
+    .filter((v): v is number => v != null)
+    .map((v) => Math.abs(v));
+  const scale = allNums.length && Math.max(...allNums) >= 1000 ? 1e5 : 1;
+  const toL = (v: number | null): number | null => (v == null ? null : v / scale);
+
+  // ── Inflows / Outflows / surplus series (grossSurplus may be carried in
+  //    netCashFlow for older reports — fall back so cards/charts still render).
+  const grossSurplus = has(cf.grossSurplus) ? cf.grossSurplus : cf.netCashFlow;
+
+  // ── Headline stat cards ──
+  const totalIn = sum(cf.totalInflows);
+  const totalOut = sum(cf.totalOutflows);
+  const grossTotal = sum(grossSurplus);
+  const drawTotal = sum(cf.drawings) ?? 0;
+  const netSurplus = grossTotal == null ? null : grossTotal - drawTotal;
+  const closingCash = lastFinite(cf.closingBalance);
+  const cards = [
+    { value: toL(totalIn), label: "Total Cash Inflows", sub: `${n} year window`, bg: "bg-emerald-50", color: "text-emerald-600" },
+    { value: toL(totalOut), label: "Total Cash Outflows", sub: `${n} year window`, bg: "bg-rose-50", color: "text-rose-600" },
+    { value: toL(netSurplus), label: `Net Surplus (${n} Yrs)`, sub: "Surplus after drawings", bg: "bg-blue-50", color: "text-blue-600" },
+    { value: toL(closingCash), label: `Closing Cash (${n ? shortFy(years[n - 1]) : ""})`, sub: "Cash at end of horizon", bg: "bg-purple-50", color: "text-purple-600" },
+  ].filter((c) => c.value != null);
+
+  // ── Chart datasets (₹ Lacs) ──
+  const flowData = years.map((y, i) => ({
     year: y,
-    Operating: cf.operatingCashFlow?.[i] || 0,
-    Investing: cf.investingCashFlow?.[i] || 0,
-    Financing: cf.financingCashFlow?.[i] || 0,
-    Net: cf.netCashFlow?.[i] || 0,
+    "Total Inflows": toL(at(cf.totalInflows, i)),
+    "Total Outflows": toL(at(cf.totalOutflows, i)),
+    "Net Surplus": toL(at(grossSurplus, i)),
   }));
-  const insight = insightCashFlow(cf);
+  const balanceData = years.map((y, i) => ({
+    year: y,
+    "Opening Cash": toL(at(cf.openingBalance, i)),
+    "Closing Cash": toL(at(cf.closingBalance, i)),
+  }));
+  let cumul = 0;
+  const cumulData = years.map((y, i) => {
+    const annual = at(grossSurplus, i);
+    if (annual != null) cumul += annual;
+    return { year: y, "Annual Net CF": toL(annual), "Cumulative Net CF": toL(cumul) };
+  });
+  const drawingsData = years.map((y, i) => ({ year: y, Drawings: toL(at(cf.drawings, i)) }));
+
+  const hasFlow = has(cf.totalInflows) || has(cf.totalOutflows) || has(grossSurplus);
+  const hasBalance = has(cf.openingBalance) || has(cf.closingBalance);
+  const hasCumul = has(grossSurplus);
+  const hasDrawings = has(cf.drawings);
+
+  // ── Statement table rows (raw rupees, exactly as printed) ──
+  const inflowRows = [
+    { label: "Profit before Bank Int. & Tax (after Dep.)", values: cf.profitBeforeInterestTax },
+    { label: "Add: Depreciation", values: cf.depreciation },
+    { label: "Increase in Term Loan", values: cf.increaseInTermLoan },
+    { label: "Increase in WC Loan", values: cf.increaseInWcLoan },
+    { label: "Increase in Capital", values: cf.increaseInCapital },
+    { label: "Increase in Capital during year", values: cf.increaseInCapitalDuringYear },
+  ].filter((r) => has(r.values));
+  const totalInRow = has(cf.totalInflows) ? { label: "Total Inflows", values: cf.totalInflows } : null;
+  const outflowRows = [
+    { label: "Capital Expenditure", values: cf.capitalExpenditure },
+    { label: "Term Loan Interest", values: cf.termLoanInterest },
+    { label: "CC Loan Interest", values: cf.ccLoanInterest },
+    { label: "Term Loan Repayment", values: cf.termLoanRepayment },
+    { label: "Increase in Receivables", values: cf.increaseInReceivables },
+    { label: "Increase in Stock", values: cf.increaseInStock },
+  ].filter((r) => has(r.values));
+  const totalOutRow = has(cf.totalOutflows) ? { label: "Total Outflows", values: cf.totalOutflows } : null;
+  const resultRows = [
+    has(cf.grossSurplus) ? { label: "Gross Surplus", values: cf.grossSurplus, tint: "bg-blue-50", color: "text-blue-700" } : null,
+    has(cf.drawings) ? { label: "Less: Drawings", values: cf.drawings, color: "text-rose-600" } : null,
+    has(cf.openingBalance) ? { label: "Opening Balance of Cash", values: cf.openingBalance } : null,
+    has(cf.closingBalance) ? { label: "Closing Balance of Cash", values: cf.closingBalance, tint: "bg-emerald-50", color: "text-emerald-700" } : null,
+  ].filter(Boolean) as { label: string; values: any; tint?: string; color?: string }[];
+  const hasInflows = inflowRows.length > 0 || totalInRow;
+  const hasOutflows = outflowRows.length > 0 || totalOutRow;
+  const hasTable = hasInflows || hasOutflows || resultRows.length > 0;
+
+  const cell = (v: any): string => {
+    const x = num(v);
+    return x == null ? "—" : Math.round(x).toLocaleString("en-IN");
+  };
+  const cfLineFmt = (v: any) => `₹${Number(v).toFixed(2)}L`;
+
+  const dataRow = (
+    row: { label: string; values: any; tint?: string; color?: string },
+    ri: number,
+    opts: { total?: boolean } = {}
+  ) => {
+    const tint = row.tint ?? (opts.total ? "bg-muted/60" : ri % 2 === 1 ? "bg-muted/40" : "bg-card");
+    const labelCls = opts.total || row.tint ? "font-semibold" : "font-medium";
+    const valCls = opts.total || row.tint ? "font-semibold" : "font-medium";
+    return (
+      <TableRow key={row.label} className={`border-border ${tint} hover:${tint}`}>
+        <TableCell className={`text-[13px] ${labelCls} text-foreground sticky left-0 z-10 ${tint}`}>{row.label}</TableCell>
+        {years.map((_, i) => (
+          <TableCell key={i} className={`text-right num-tabular text-[13px] ${valCls} ${row.color ?? "text-foreground/80"}`}>
+            {cell(at(row.values, i))}
+          </TableCell>
+        ))}
+      </TableRow>
+    );
+  };
+  const sectionRow = (label: string, color: string) => (
+    <TableRow key={`sec-${label}`} className="border-border bg-slate-100 hover:bg-slate-100">
+      <TableCell className={`text-eyebrow ${color} sticky left-0 z-10 bg-slate-100`} colSpan={n + 1}>{label}</TableCell>
+    </TableRow>
+  );
 
   return (
     <SectionPage>
-      <PageHeader eyebrow="Financials" title="Cash Flow" description="Operating, investing, financing — and the net resulting cash movement." />
+      <PageHeader
+        eyebrow="Financials"
+        title="Projected Cash Flow Statement"
+        description={`Cash inflows, outflows and resulting balances across the ${n}-year projection.`}
+      />
       <SectionVerdict verdict={verdict} isLoading={isLoadingVerdict} />
 
-      <ChartFrame
-        eyebrow="Cash Movement"
-        title="Annual cash flow breakdown"
-        description="Composition of cash generated and consumed across activities. The line tracks net cash position."
-        chartHeight={400}
-        footer={<InsightCaption text={insight} />}
-      >
-        <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={chartData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
-            <CartesianGrid vertical={false} stroke="hsl(220 16% 90%)" />
-            <XAxis dataKey="year" tick={axisTick} axisLine={false} tickLine={false} />
-            <YAxis tick={axisTick} axisLine={false} tickLine={false} />
-            <RechartsTooltip contentStyle={tooltipStyle} />
-            <Legend wrapperStyle={{ fontSize: 12, paddingTop: 12 }} iconType="circle" />
-            <Bar dataKey="Operating" fill={NAVY} radius={[3, 3, 0, 0]} maxBarSize={22} />
-            <Bar dataKey="Investing" fill="hsl(218 30% 55%)" radius={[3, 3, 0, 0]} maxBarSize={22} />
-            <Bar dataKey="Financing" fill={GOLD} radius={[3, 3, 0, 0]} maxBarSize={22} />
-            <Line type="monotone" dataKey="Net" stroke={EMERALD} strokeWidth={2.5} dot={{ r: 3, fill: EMERALD }} />
-          </ComposedChart>
-        </ResponsiveContainer>
-      </ChartFrame>
+      {cards.length > 0 && (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          {cards.map((c, i) => (
+            <div key={i} className={`rounded-2xl p-5 ${c.bg}`}>
+              <div className={`font-display text-[26px] leading-none num-tabular tracking-tight ${c.color}`}>{fmtRupeesL(c.value!)}</div>
+              <div className="text-[13px] font-semibold text-foreground mt-2">{c.label}</div>
+              <div className="text-[11.5px] text-muted-foreground mt-0.5">{c.sub}</div>
+            </div>
+          ))}
+        </div>
+      )}
 
-      <div className="mt-6">
-        <DataTable
-          years={cf.years}
-          rows={[
-            { label: "Operating Cash Flow", values: cf.operatingCashFlow || [] },
-            { label: "Investing Cash Flow", values: cf.investingCashFlow || [] },
-            { label: "Financing Cash Flow", values: cf.financingCashFlow || [] },
-            { label: "Net Cash Flow", values: cf.netCashFlow || [], emphasis: true },
-          ]}
-        />
-      </div>
+      {(hasFlow || hasBalance) && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-6">
+          {hasFlow && (
+            <DashCard title="Cash Inflows vs Outflows" subtitle="Total inflows, outflows & net surplus (₹ Lacs)">
+              <div className="h-[260px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={flowData} margin={{ top: 8, right: 16, bottom: 0, left: -12 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(220 16% 92%)" vertical={false} />
+                    <XAxis dataKey="year" tick={axisTick} axisLine={false} tickLine={false} />
+                    <YAxis tick={axisTick} axisLine={false} tickLine={false} width={40} tickFormatter={(v: any) => `${Math.round(v)}L`} />
+                    <RechartsTooltip contentStyle={tooltipStyle} cursor={{ fill: "hsl(221 83% 53% / 0.06)" }} formatter={(v: any) => cfLineFmt(v)} />
+                    <Legend wrapperStyle={{ fontSize: 12 }} iconType="circle" />
+                    <Bar dataKey="Total Inflows" fill={EMERALD} radius={[3, 3, 0, 0]} maxBarSize={20} />
+                    <Bar dataKey="Total Outflows" fill={ROSE} radius={[3, 3, 0, 0]} maxBarSize={20} />
+                    <Bar dataKey="Net Surplus" fill={NAVY} radius={[3, 3, 0, 0]} maxBarSize={20} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </DashCard>
+          )}
+
+          {hasBalance && (
+            <DashCard title="Cash Balance — Opening vs Closing" subtitle="Opening & closing cash position (₹ Lacs)">
+              <div className="h-[260px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={balanceData} margin={{ top: 8, right: 16, bottom: 0, left: -12 }}>
+                    <defs>
+                      <linearGradient id="cfClosingFill" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor={EMERALD} stopOpacity={0.25} />
+                        <stop offset="100%" stopColor={EMERALD} stopOpacity={0.02} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(220 16% 92%)" vertical={false} />
+                    <XAxis dataKey="year" tick={axisTick} axisLine={false} tickLine={false} />
+                    <YAxis tick={axisTick} axisLine={false} tickLine={false} width={40} tickFormatter={(v: any) => `${Math.round(v)}L`} />
+                    <RechartsTooltip contentStyle={tooltipStyle} formatter={(v: any) => cfLineFmt(v)} />
+                    <Legend wrapperStyle={{ fontSize: 12 }} iconType="plainline" />
+                    <Area type="monotone" dataKey="Opening Cash" stroke={NAVY} strokeWidth={2.5} fill={NAVY} fillOpacity={0.04} dot={{ r: 3, fill: NAVY }} connectNulls />
+                    <Area type="monotone" dataKey="Closing Cash" stroke={EMERALD} strokeWidth={2.5} fill="url(#cfClosingFill)" dot={{ r: 3, fill: EMERALD }} connectNulls />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </DashCard>
+          )}
+        </div>
+      )}
+
+      {(hasCumul || hasDrawings) && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-6">
+          {hasCumul && (
+            <DashCard title="Annual & Cumulative Net Cash Flows" subtitle="Surplus generated and accumulated (₹ Lacs)">
+              <div className="h-[260px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={cumulData} margin={{ top: 8, right: 16, bottom: 0, left: -12 }}>
+                    <defs>
+                      <linearGradient id="cfCumulFill" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor={PURPLE} stopOpacity={0.28} />
+                        <stop offset="100%" stopColor={PURPLE} stopOpacity={0.02} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(220 16% 92%)" vertical={false} />
+                    <XAxis dataKey="year" tick={axisTick} axisLine={false} tickLine={false} />
+                    <YAxis tick={axisTick} axisLine={false} tickLine={false} width={40} tickFormatter={(v: any) => `${Math.round(v)}L`} />
+                    <RechartsTooltip contentStyle={tooltipStyle} formatter={(v: any) => cfLineFmt(v)} />
+                    <Legend wrapperStyle={{ fontSize: 12 }} iconType="circle" />
+                    <Area type="monotone" dataKey="Cumulative Net CF" stroke={PURPLE} strokeWidth={2.5} fill="url(#cfCumulFill)" dot={{ r: 3, fill: PURPLE }} connectNulls />
+                    <Bar dataKey="Annual Net CF" fill={PURPLE} fillOpacity={0.35} radius={[3, 3, 0, 0]} maxBarSize={18} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </DashCard>
+          )}
+
+          {hasDrawings && (
+            <DashCard title="Drawings by Proprietor" subtitle="Cash withdrawn by the proprietor (₹ Lacs)">
+              <div className="h-[260px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={drawingsData} margin={{ top: 8, right: 16, bottom: 0, left: -12 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(220 16% 92%)" vertical={false} />
+                    <XAxis dataKey="year" tick={axisTick} axisLine={false} tickLine={false} />
+                    <YAxis tick={axisTick} axisLine={false} tickLine={false} width={40} tickFormatter={(v: any) => `${Math.round(v)}L`} />
+                    <RechartsTooltip contentStyle={tooltipStyle} cursor={{ fill: "hsl(32 90% 52% / 0.08)" }} formatter={(v: any) => cfLineFmt(v)} />
+                    <Bar dataKey="Drawings" fill={GOLD} radius={[3, 3, 0, 0]} maxBarSize={26} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </DashCard>
+          )}
+        </div>
+      )}
+
+      {hasTable && (
+        <div>
+          <h3 className="font-display text-[18px] mb-1">Projected Cash Flow Statement (₹)</h3>
+          <p className="text-[12px] text-muted-foreground mb-3">Figures in rupees, exactly as stated in the report.</p>
+          <div className="surface-card rounded-2xl overflow-hidden">
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-primary hover:bg-primary border-0">
+                    <TableHead className="text-eyebrow text-white/85 py-3.5 sticky left-0 bg-primary z-10">Particulars</TableHead>
+                    {years.map((y) => (
+                      <TableHead key={y} className="text-eyebrow text-white/85 text-right num-tabular">{y}</TableHead>
+                    ))}
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {hasInflows && sectionRow("Cash Inflows", "text-emerald-700")}
+                  {inflowRows.map((r, ri) => dataRow(r, ri))}
+                  {totalInRow && dataRow({ ...totalInRow, tint: "bg-emerald-50", color: "text-emerald-700" }, 0, { total: true })}
+                  {hasOutflows && sectionRow("Cash Outflows", "text-rose-700")}
+                  {outflowRows.map((r, ri) => dataRow(r, ri))}
+                  {totalOutRow && dataRow({ ...totalOutRow, tint: "bg-rose-50", color: "text-rose-700" }, 0, { total: true })}
+                  {resultRows.map((r, ri) => dataRow(r, ri))}
+                </TableBody>
+              </Table>
+            </div>
+          </div>
+        </div>
+      )}
     </SectionPage>
   );
 }

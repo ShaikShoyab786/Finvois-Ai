@@ -40,6 +40,12 @@ CRITICAL RULES:
    - Use values exactly as printed; set any ratio absent from the document to null.
 9. For leverageAnalysis (often titled "Leverage Ratio Analysis" / "Calculation of Operating/Financial/Combined Leverage"), capture one value per projected year, every array the same length as "years": operatingLeverage (OL = Contribution / EBIT), financialLeverage (FL = EBIT / EBT), combinedLeverage (CL = OL × FL). Use values exactly as printed; set an absent series to null.
 10. For depreciationSchedule (the "Depreciation Schedule", normally the written-down-value (WDV) method under the Income Tax Act, figures in lakhs): assetName (e.g. "Plant & Machinery"), ratePct (depreciation rate as a number, e.g. 15 for 15%), method (e.g. "WDV — Income Tax Act"), years[], and per-year arrays openingWdv (WDV at beginning of year), additions (additions during the year), depreciation (depreciation charged for the year), closingWdv (WDV at year end). Use values exactly as printed; set any absent field to null.
+11. For cashFlow (the "Projected Cash Flow Statement", figures in rupees exactly as printed), capture one value per projected year, every array the same length as "years":
+   - Cash inflows: profitBeforeInterestTax (Profit before Bank Interest & Tax, after depreciation), depreciation (Add: Depreciation), increaseInTermLoan (Increase in Term Loan), increaseInWcLoan (Increase in WC / working-capital / CC Loan), increaseInCapital (Increase in Capital), increaseInCapitalDuringYear (Increase in Capital during year), and totalInflows (Total Inflows).
+   - Cash outflows: capitalExpenditure (Capital Expenditure), termLoanInterest (Term Loan Interest), ccLoanInterest (CC / working-capital interest), termLoanRepayment (Term Loan Repayment), increaseInReceivables (Increase in Receivables), increaseInStock (Increase in Stock), and totalOutflows (Total Outflows).
+   - Resulting cash: grossSurplus (Gross Surplus = Total Inflows − Total Outflows), drawings (Less: Drawings), openingBalance (Opening Balance of Cash), closingBalance (Closing Balance of Cash).
+   - Also set netCashFlow equal to grossSurplus (the annual net cash generated). Leave operatingCashFlow as nulls unless the document provides a distinct operating-cash figure.
+   - Use values exactly as printed; set any line absent from the document to null.
 
 Extract the following structure:
 {
@@ -147,9 +153,25 @@ Extract the following structure:
   },
   "cashFlow": {
     "years": string[],
+    "profitBeforeInterestTax": (number|null)[],
+    "depreciation": (number|null)[],
+    "increaseInTermLoan": (number|null)[],
+    "increaseInWcLoan": (number|null)[],
+    "increaseInCapital": (number|null)[],
+    "increaseInCapitalDuringYear": (number|null)[],
+    "totalInflows": (number|null)[],
+    "capitalExpenditure": (number|null)[],
+    "termLoanInterest": (number|null)[],
+    "ccLoanInterest": (number|null)[],
+    "termLoanRepayment": (number|null)[],
+    "increaseInReceivables": (number|null)[],
+    "increaseInStock": (number|null)[],
+    "totalOutflows": (number|null)[],
+    "grossSurplus": (number|null)[],
+    "drawings": (number|null)[],
+    "openingBalance": (number|null)[],
+    "closingBalance": (number|null)[],
     "operatingCashFlow": (number|null)[],
-    "investingCashFlow": (number|null)[],
-    "financingCashFlow": (number|null)[],
     "netCashFlow": (number|null)[]
   },
   "loanSchedule": {
