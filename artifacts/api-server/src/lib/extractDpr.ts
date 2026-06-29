@@ -16,6 +16,13 @@ CRITICAL RULES:
 3. All monetary amounts should be strings preserving the original format (e.g. "31.50 Lacs", "₹35.00L", "50,000").
 4. For arrays of yearly data, ensure all arrays have the same length.
 5. Return ONLY valid JSON, no markdown, no explanation.
+6. For plAccount, capture the full Projected P&L statement line-by-line when present:
+   - COGS / direct costs: openingStock, directMaterial (direct material / direct expenses), closingStock, costOfGoodsSold.
+   - Operating expenses: adminSellingExpenses (total admin & selling), and its components salaries (salaries & wages), otherExpenses, miscExpenses, processingFees.
+   - Profit tiers: grossProfit, ebdit (a.k.a. EBITDA / operating profit), ebit, ebt (earnings before tax). "expenses" = total operating expenses, "interest" = total interest.
+   - Interest split: interestTermLoan, interestCCLoan (cash-credit / working-capital interest).
+   - Use values exactly as printed; set any line absent from the document to null. Keep every array the same length as "years".
+   - periodNote: any note about a partial first year (e.g. "FY2025-26: September to March (7 months)"), else null.
 
 Extract the following structure:
 {
@@ -49,11 +56,26 @@ Extract the following structure:
   "plAccount": {
     "years": string[],
     "revenue": (number|null)[],
+    "openingStock": (number|null)[],
+    "directMaterial": (number|null)[],
+    "closingStock": (number|null)[],
+    "costOfGoodsSold": (number|null)[],
     "grossProfit": (number|null)[],
-    "netProfit": (number|null)[],
+    "adminSellingExpenses": (number|null)[],
+    "salaries": (number|null)[],
+    "otherExpenses": (number|null)[],
+    "miscExpenses": (number|null)[],
+    "processingFees": (number|null)[],
     "expenses": (number|null)[],
+    "ebdit": (number|null)[],
     "depreciation": (number|null)[],
-    "interest": (number|null)[]
+    "ebit": (number|null)[],
+    "interestTermLoan": (number|null)[],
+    "interestCCLoan": (number|null)[],
+    "interest": (number|null)[],
+    "ebt": (number|null)[],
+    "netProfit": (number|null)[],
+    "periodNote": string|null
   },
   "balanceSheet": {
     "years": string[],

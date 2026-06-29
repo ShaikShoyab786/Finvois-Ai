@@ -1,2 +1,3 @@
 - [Finvois Business Profile](finvois-business-profile.md) — Timeline/ProductPortfolio render conditionally (schema lacks fields); SWOT lives only in Business Profile.
 - [Finvois data units](finvois-data-units.md) — plAccount/cashFlow line items are raw rupees; projectCost/financialSummary are lakhs. Normalise before charting together.
+- [Finvois extraction flow](finvois-extraction-flow.md) — extractedData is raw jsonb returned with no Zod stripping; add a prompt field + POST /reports/:id/retry to backfill, no codegen needed.

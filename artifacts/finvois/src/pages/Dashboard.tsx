@@ -34,6 +34,7 @@ import { InsightCaption } from "@/components/report/InsightCaption";
 import { ChartFrame } from "@/components/report/ChartFrame";
 import { MetricCard } from "@/components/report/MetricCard";
 import { DataTable } from "@/components/report/DataTable";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ProfitabilityWaterfall } from "@/components/report/ProfitabilityWaterfall";
 import { WorkingCapitalChart } from "@/components/report/WorkingCapitalChart";
 import { CapitalStructureChart } from "@/components/report/CapitalStructureChart";
@@ -524,6 +525,81 @@ function ProductPortfolioTable({ ed }: { ed: any }) {
   );
 }
 
+// Light sky tone for the third expense-breakdown segment.
+const SKY = "hsl(199 89% 70%)";
+
+// Indian-grouped rupee formatter for the detailed P&L statement & schedules.
+const fmtRsFull = (n: number): string =>
+  new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 }).format(n);
+
+type PLRowKind = "header" | "normal" | "sub" | "strong" | "total" | "grand";
+interface PLRow {
+  label: string;
+  values?: (number | null)[];
+  kind: PLRowKind;
+}
+
+/**
+ * Detailed Projected P&L statement table — supports section-header rows,
+ * indented sub-rows, subtotal tiers and highlighted grand-total rows. Mirrors
+ * the classic DPR P&L layout (COGS → Gross Profit → Operating Exp → EBDIT →
+ * EBIT → Interest → EBT).
+ */
+function PLStatementTable({ years, rows }: { years: string[]; rows: PLRow[] }) {
+  const span = years.length + 1;
+  return (
+    <div className="surface-card rounded-2xl overflow-hidden">
+      <div className="overflow-x-auto">
+        <Table>
+          <TableHeader>
+            <TableRow className="bg-primary hover:bg-primary border-0">
+              <TableHead className="text-eyebrow text-white/85 py-3.5 sticky left-0 bg-primary z-10">Particulars</TableHead>
+              {years.map((y) => (
+                <TableHead key={y} className="text-eyebrow text-white/85 text-right num-tabular">{y}</TableHead>
+              ))}
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.map((row, ri) => {
+              if (row.kind === "header") {
+                return (
+                  <TableRow key={`${row.label}-${ri}`} className="border-border bg-muted/60 hover:bg-muted/60">
+                    <TableCell colSpan={span} className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-muted-foreground py-2 sticky left-0 bg-muted/60 z-10">
+                      {row.label}
+                    </TableCell>
+                  </TableRow>
+                );
+              }
+              const total = row.kind === "total";
+              const grand = row.kind === "grand";
+              const strong = row.kind === "strong";
+              const sub = row.kind === "sub";
+              const rowBg = grand ? "bg-primary/[0.08]" : total ? "bg-brand/[0.06]" : ri % 2 === 1 ? "bg-muted/40" : "bg-card";
+              const labelWeight = grand ? "font-bold text-foreground" : total || strong ? "font-semibold text-foreground" : sub ? "text-muted-foreground/80" : "text-muted-foreground";
+              const valWeight = grand ? "font-bold text-foreground" : total || strong ? "font-semibold text-foreground" : "text-foreground/85";
+              return (
+                <TableRow key={`${row.label}-${ri}`} className={`border-border ${rowBg} hover:${rowBg}`}>
+                  <TableCell className={`text-[13px] sticky left-0 z-10 ${rowBg} ${labelWeight} ${sub ? "pl-8" : ""}`}>
+                    {row.label}
+                  </TableCell>
+                  {years.map((_, i) => {
+                    const v = row.values?.[i];
+                    return (
+                      <TableCell key={i} className={`text-right num-tabular text-[13.5px] ${valWeight}`}>
+                        {typeof v === "number" && isFinite(v) ? fmtRsFull(v) : "—"}
+                      </TableCell>
+                    );
+                  })}
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </div>
+    </div>
+  );
+}
+
 function PLSection({ ed, verdict, isLoadingVerdict }: { ed: any; verdict?: string | null; isLoadingVerdict?: boolean }) {
   const pl = ed?.plAccount;
   if (!pl?.years?.length) return (
@@ -534,105 +610,208 @@ function PLSection({ ed, verdict, isLoadingVerdict }: { ed: any; verdict?: strin
     </SectionPage>
   );
 
-  const metrics = plLatestMetrics(pl);
-  const chartData = pl.years.map((y: string, i: number) => ({
+  const years: string[] = pl.years;
+  const at = (a: any, i: number): number | null => {
+    const v = a?.[i];
+    return typeof v === "number" && isFinite(v) ? v : null;
+  };
+  const has = (a: any): boolean => Array.isArray(a) && a.some((v: any) => typeof v === "number" && isFinite(v));
+
+  // Profit tiers — prefer extracted values, fall back to identities only when
+  // the constituent inputs exist (never fabricate from thin air).
+  const ebditArr = years.map((_, i) => {
+    const v = at(pl.ebdit, i);
+    if (v != null) return v;
+    const gp = at(pl.grossProfit, i), ex = at(pl.expenses, i);
+    return gp != null && ex != null ? gp - ex : null;
+  });
+  const ebitArr = years.map((_, i) => {
+    const v = at(pl.ebit, i);
+    if (v != null) return v;
+    const dep = at(pl.depreciation, i);
+    // Only derive when both inputs are present — never assume depreciation = 0.
+    return ebditArr[i] != null && dep != null ? ebditArr[i]! - dep : null;
+  });
+  const ebtArr = years.map((_, i) => {
+    const v = at(pl.ebt, i);
+    if (v != null) return v;
+    const intr = at(pl.interest, i);
+    if (ebitArr[i] != null && intr != null) return ebitArr[i]! - intr;
+    // Last resort: this extraction schema carries no tax line, so netProfit is
+    // the pre-tax bottom line (== EBT). Used only when EBT can't be derived.
+    return at(pl.netProfit, i);
+  });
+
+  // ── Chart 1: Revenue vs Profit Levels (grouped bars) ──
+  const profitLevels = years.map((y, i) => ({
     year: y,
-    Revenue: pl.revenue?.[i] || 0,
-    "Gross Profit": pl.grossProfit?.[i] || 0,
-    "Net Profit": pl.netProfit?.[i] || 0,
+    Revenue: at(pl.revenue, i),
+    "Gross Profit": at(pl.grossProfit, i),
+    EBDIT: ebditArr[i],
+    EBT: ebtArr[i],
   }));
-  const insight = insightPL(pl);
+  const hasProfitLevels = profitLevels.some((d) => d.Revenue != null || d["Gross Profit"] != null || d.EBDIT != null || d.EBT != null);
+  const profitMax = Math.max(0, ...profitLevels.flatMap((d) => [d.Revenue, d["Gross Profit"], d.EBDIT, d.EBT].map((x) => (x == null ? 0 : Math.abs(x)))));
+  const fmtProfitL = lakhFormatter(profitMax);
+
+  // ── Chart 2: Expense Breakdown (stacked bars) ──
+  const expenseBreak = years.map((y, i) => ({
+    year: y,
+    Salaries: at(pl.salaries, i),
+    "Other Exp": at(pl.otherExpenses, i),
+    Misc: at(pl.miscExpenses, i),
+    Depreciation: at(pl.depreciation, i),
+    Interest: at(pl.interest, i),
+  }));
+  const hasExpenseBreak = expenseBreak.some((d) => [d.Salaries, d["Other Exp"], d.Misc, d.Depreciation, d.Interest].some((x) => x != null));
+  const expMax = Math.max(0, ...expenseBreak.map((d) => [d.Salaries, d["Other Exp"], d.Misc, d.Depreciation, d.Interest].reduce<number>((s, x) => s + (x || 0), 0)));
+  const fmtExpL = lakhFormatter(expMax);
+
+  // ── Detailed P&L statement rows (only what exists) ──
+  const rows: PLRow[] = [];
+  if (has(pl.revenue)) rows.push({ label: "Gross Revenue", values: pl.revenue, kind: "grand" });
+
+  const cogsRows = [
+    { label: "Opening Stock", arr: pl.openingStock, kind: "normal" as PLRowKind },
+    { label: "Direct Material / Expenses", arr: pl.directMaterial, kind: "normal" as PLRowKind },
+    { label: "(−) Closing Stock", arr: pl.closingStock, kind: "normal" as PLRowKind },
+    { label: "Cost of Goods Sold", arr: pl.costOfGoodsSold, kind: "strong" as PLRowKind },
+  ].filter((r) => has(r.arr));
+  if (cogsRows.length) {
+    rows.push({ label: "Cost of Goods Sold / Direct Costs", kind: "header" });
+    cogsRows.forEach((r) => rows.push({ label: r.label, values: r.arr, kind: r.kind }));
+  }
+
+  if (has(pl.grossProfit)) rows.push({ label: "Gross Profit", values: pl.grossProfit, kind: "total" });
+
+  const opSubRows = [
+    { label: "Salaries & Wages", arr: pl.salaries },
+    { label: "Other Expenses", arr: pl.otherExpenses },
+    { label: "Misc. Expenses", arr: pl.miscExpenses },
+  ].filter((r) => has(r.arr));
+  let adminArr: (number | null)[] | null = null;
+  let adminLabel = "";
+  if (has(pl.adminSellingExpenses)) {
+    adminArr = pl.adminSellingExpenses;
+    adminLabel = "Admin & Selling Expenses";
+  } else if (has(pl.expenses)) {
+    adminArr = pl.expenses;
+    adminLabel = "Total Operating Expenses";
+  }
+  if (opSubRows.length || adminArr) {
+    rows.push({ label: "Operating Expenses", kind: "header" });
+    if (adminArr) rows.push({ label: adminLabel, values: adminArr, kind: "strong" });
+    opSubRows.forEach((r) => rows.push({ label: r.label, values: r.arr, kind: "sub" }));
+  }
+
+  if (ebditArr.some((x) => x != null)) rows.push({ label: "EBDIT", values: ebditArr, kind: "total" });
+  if (has(pl.depreciation)) rows.push({ label: "(−) Depreciation", values: pl.depreciation, kind: "normal" });
+  if (ebitArr.some((x) => x != null)) rows.push({ label: "EBIT", values: ebitArr, kind: "total" });
+
+  const hasIntSplit = has(pl.interestTermLoan) || has(pl.interestCCLoan);
+  if (has(pl.interestTermLoan)) rows.push({ label: "(−) Interest — Term Loan", values: pl.interestTermLoan, kind: "normal" });
+  if (has(pl.interestCCLoan)) rows.push({ label: "(−) Interest — CC Loan", values: pl.interestCCLoan, kind: "normal" });
+  if (has(pl.interest)) rows.push({ label: hasIntSplit ? "Total Interest" : "(−) Interest", values: pl.interest, kind: hasIntSplit ? "strong" : "normal" });
+
+  if (ebtArr.some((x) => x != null)) rows.push({ label: "Earnings Before Tax (EBT)", values: ebtArr, kind: "grand" });
+
+  // ── Schedule 1: Admin & Selling Expenses ──
+  const sched1: { label: string; values: (number | null)[]; emphasis?: boolean }[] = [
+    { label: "Salaries & Wages", arr: pl.salaries },
+    { label: "Other Expenses", arr: pl.otherExpenses },
+    { label: "Processing Fees", arr: pl.processingFees },
+    { label: "Misc. Expenses", arr: pl.miscExpenses },
+  ].filter((r) => has(r.arr)).map((r) => ({ label: r.label, values: r.arr }));
+  if (has(pl.adminSellingExpenses)) sched1.push({ label: "Total Admin & Selling Expenses", values: pl.adminSellingExpenses, emphasis: true });
+  const hasSched1 = sched1.length > 0;
+
+  // ── Schedule 2: Interest Statement ──
+  const rate = typeof ed?.loanSchedule?.interestRate === "string" ? ed.loanSchedule.interestRate : null;
+  const rateSuffix = rate ? ` @ ${rate}` : "";
+  const sched2: { label: string; values: (number | null)[]; emphasis?: boolean }[] = [];
+  if (has(pl.interestTermLoan)) sched2.push({ label: `Interest on Term Loan${rateSuffix}`, values: pl.interestTermLoan });
+  if (has(pl.interestCCLoan)) sched2.push({ label: `Interest on CC Loan${rateSuffix}`, values: pl.interestCCLoan });
+  if (has(pl.interest)) sched2.push({ label: "Total Interest", values: pl.interest, emphasis: true });
+  const hasSched2 = sched2.length > 0;
+
+  const fyRange = years.length === 1 ? years[0] : `${years[0]} to ${years[years.length - 1]}`;
 
   return (
     <SectionPage>
-      <PageHeader eyebrow="Financials" title="P&L Account" description="Revenue trajectory and profitability across the projection window." />
+      <PageHeader eyebrow="Financials" title="P&L Account" description={`Projected P&L — ${fyRange} (₹ in Rupees)`} />
       <SectionVerdict verdict={verdict} isLoading={isLoadingVerdict} />
 
-      {/* Latest year KPI strip */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-        <MetricCard
-          label={`Revenue · ${pl.years[pl.years.length - 1]}`}
-          value={metrics.revenue != null ? fmtRupeesL(metrics.revenue) : null}
-          tone="neutral"
-        />
-        <MetricCard
-          label={`Net Profit · ${pl.years[pl.years.length - 1]}`}
-          value={metrics.netProfit != null ? fmtRupeesL(metrics.netProfit) : null}
-          tone={metrics.netProfit == null ? "neutral" : metrics.netProfit > 0 ? "good" : "risk"}
-        />
-        <MetricCard
-          label="Gross Margin (latest)"
-          value={metrics.grossMargin != null ? `${metrics.grossMargin.toFixed(1)}%` : null}
-          tone="neutral"
-        />
-        <MetricCard
-          label="Net Margin (latest)"
-          value={metrics.netMargin != null ? `${metrics.netMargin.toFixed(1)}%` : null}
-          tone={metrics.netMargin == null ? "neutral" : metrics.netMargin > 5 ? "good" : "warn"}
-        />
-      </div>
+      {(hasProfitLevels || hasExpenseBreak) && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-6">
+          {hasProfitLevels && (
+            <DashCard title="Revenue vs Profit Levels" subtitle="Revenue against profit tiers (₹ in Lakhs)">
+              <div className="h-[300px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={profitLevels} margin={{ top: 8, right: 12, bottom: 0, left: -8 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(220 16% 92%)" vertical={false} />
+                    <XAxis dataKey="year" tick={axisTick} axisLine={false} tickLine={false} />
+                    <YAxis tick={axisTick} axisLine={false} tickLine={false} tickFormatter={fmtProfitL} width={48} />
+                    <RechartsTooltip contentStyle={tooltipStyle} cursor={{ fill: "hsl(221 83% 53% / 0.05)" }} formatter={(val: any) => fmtINR(Number(val))} />
+                    <Legend wrapperStyle={{ fontSize: 12 }} iconType="circle" />
+                    <Bar dataKey="Revenue" fill={NAVY} radius={[4, 4, 0, 0]} maxBarSize={18} />
+                    <Bar dataKey="Gross Profit" fill={EMERALD} radius={[4, 4, 0, 0]} maxBarSize={18} />
+                    <Bar dataKey="EBDIT" fill={GOLD} radius={[4, 4, 0, 0]} maxBarSize={18} />
+                    <Bar dataKey="EBT" fill={PURPLE} radius={[4, 4, 0, 0]} maxBarSize={18} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </DashCard>
+          )}
 
-      {/* Layer 2a — relationship view: where does the latest rupee go? */}
-      <ChartFrame
-        eyebrow="Where The Rupee Goes"
-        title={`Profitability waterfall · ${pl.years[pl.years.length - 1]}`}
-        description="Latest-year flow from top-line revenue down to net profit — each deduction shown as a step."
-        chartHeight={340}
-        footer={<InsightCaption text={insightWaterfall(pl)} />}
-      >
-        <ProfitabilityWaterfall pl={pl} />
-      </ChartFrame>
+          {hasExpenseBreak && (
+            <DashCard title="Expense Breakdown" subtitle="Cost composition by category (₹ in Lakhs)">
+              <div className="h-[300px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={expenseBreak} margin={{ top: 8, right: 12, bottom: 0, left: -8 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(220 16% 92%)" vertical={false} />
+                    <XAxis dataKey="year" tick={axisTick} axisLine={false} tickLine={false} />
+                    <YAxis tick={axisTick} axisLine={false} tickLine={false} tickFormatter={fmtExpL} width={48} />
+                    <RechartsTooltip contentStyle={tooltipStyle} cursor={{ fill: "hsl(221 83% 53% / 0.05)" }} formatter={(val: any) => fmtINR(Number(val))} />
+                    <Legend wrapperStyle={{ fontSize: 12 }} iconType="circle" />
+                    <Bar dataKey="Salaries" stackId="exp" fill={NAVY} maxBarSize={40} />
+                    <Bar dataKey="Other Exp" stackId="exp" fill={NAVY_LIGHT} maxBarSize={40} />
+                    <Bar dataKey="Misc" stackId="exp" fill={SKY} maxBarSize={40} />
+                    <Bar dataKey="Depreciation" stackId="exp" fill={GOLD} maxBarSize={40} />
+                    <Bar dataKey="Interest" stackId="exp" fill={ROSE} radius={[4, 4, 0, 0]} maxBarSize={40} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </DashCard>
+          )}
+        </div>
+      )}
 
-      <div className="h-6" />
+      {rows.length > 0 && (
+        <div className="mb-3">
+          <h3 className="font-display text-[18px] mb-3">Projected Profit &amp; Loss Statement</h3>
+          <PLStatementTable years={years} rows={rows} />
+          <p className="text-[12px] text-muted-foreground mt-2">{insightPL(pl)}</p>
+          {typeof pl.periodNote === "string" && pl.periodNote.trim() && (
+            <p className="text-[11.5px] text-muted-foreground/80 mt-1">* {pl.periodNote}</p>
+          )}
+        </div>
+      )}
 
-      <ChartFrame
-        eyebrow="Revenue & Profitability"
-        title="Earnings trajectory"
-        description="Top-line revenue against gross and net profit progression."
-        chartHeight={360}
-        footer={<InsightCaption text={insight} />}
-      >
-        <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={chartData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
-            <defs>
-              <linearGradient id="revFill" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor={NAVY} stopOpacity={0.3} />
-                <stop offset="100%" stopColor={NAVY} stopOpacity={0} />
-              </linearGradient>
-              <linearGradient id="gpFill" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor={NAVY_LIGHT} stopOpacity={0.35} />
-                <stop offset="100%" stopColor={NAVY_LIGHT} stopOpacity={0} />
-              </linearGradient>
-              <linearGradient id="npFill" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor={GOLD} stopOpacity={0.45} />
-                <stop offset="100%" stopColor={GOLD} stopOpacity={0} />
-              </linearGradient>
-            </defs>
-            <CartesianGrid vertical={false} stroke="hsl(220 16% 90%)" />
-            <XAxis dataKey="year" tick={axisTick} axisLine={false} tickLine={false} />
-            <YAxis tick={axisTick} axisLine={false} tickLine={false} />
-            <RechartsTooltip contentStyle={tooltipStyle} />
-            <Legend wrapperStyle={{ fontSize: 12, paddingTop: 12 }} iconType="circle" />
-            <Area type="monotone" dataKey="Revenue" stroke={NAVY} strokeWidth={2.5} fill="url(#revFill)" />
-            <Area type="monotone" dataKey="Gross Profit" stroke={NAVY_LIGHT} strokeWidth={2} fill="url(#gpFill)" />
-            <Area type="monotone" dataKey="Net Profit" stroke={GOLD} strokeWidth={2.5} fill="url(#npFill)" />
-          </AreaChart>
-        </ResponsiveContainer>
-      </ChartFrame>
+      {hasSched1 && (
+        <div className="mt-8">
+          <h3 className="font-display text-[18px] mb-1">Schedule 1 — Administrative &amp; Selling Expenses</h3>
+          <p className="text-[12.5px] text-muted-foreground mb-4">Breakdown of operating overheads (₹ in Rupees)</p>
+          <DataTable years={years} rows={sched1} format={fmtRsFull} />
+        </div>
+      )}
 
-      <div className="mt-6">
-        <DataTable
-          years={pl.years}
-          rows={[
-            { label: "Revenue", values: pl.revenue || [], emphasis: true },
-            { label: "Gross Profit", values: pl.grossProfit || [] },
-            { label: "Expenses", values: pl.expenses || [] },
-            { label: "Depreciation", values: pl.depreciation || [] },
-            { label: "Interest", values: pl.interest || [] },
-            { label: "Net Profit", values: pl.netProfit || [], emphasis: true },
-          ]}
-        />
-      </div>
+      {hasSched2 && (
+        <div className="mt-8">
+          <h3 className="font-display text-[18px] mb-1">Schedule 2 — Interest Statement</h3>
+          <p className="text-[12.5px] text-muted-foreground mb-4">Interest on borrowings by facility (₹ in Rupees)</p>
+          <DataTable years={years} rows={sched2} format={fmtRsFull} />
+        </div>
+      )}
     </SectionPage>
   );
 }
