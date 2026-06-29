@@ -1,0 +1,1 @@
+- [Finvois Business Profile](finvois-business-profile.md) — Timeline/ProductPortfolio render conditionally (schema lacks fields); SWOT lives only in Business Profile.

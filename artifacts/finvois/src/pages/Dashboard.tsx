@@ -18,6 +18,9 @@ import {
   AreaChart,
   Area,
   ComposedChart,
+  PieChart,
+  Pie,
+  Cell,
 } from "recharts";
 import { motion } from "framer-motion";
 
@@ -82,6 +85,11 @@ const GOLD = "hsl(32 90% 52%)";         // orange accent
 const SLATE = "hsl(215 16% 47%)";
 const EMERALD = "hsl(158 64% 40%)";
 const ROSE = "hsl(0 72% 51%)";
+const PURPLE = "hsl(262 83% 58%)";
+
+const PIE_COLORS = [NAVY, NAVY_LIGHT, GOLD, EMERALD, PURPLE, ROSE];
+const fmtINR = (n: number | null | undefined): string =>
+  n == null ? "—" : `₹${Number(n).toLocaleString("en-IN")}`;
 
 const tooltipStyle = {
   borderRadius: 10,
@@ -210,41 +218,6 @@ export default function Dashboard() {
                     </motion.div>
                   ))}
                 </motion.div>
-                {ed?.projectCost?.financeBreakdown && ed.projectCost.financeBreakdown.length > 0 && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 14 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.5, delay: 0.7 }}
-                    className="surface-card rounded-2xl p-8"
-                  >
-                    <div className="grid lg:grid-cols-5 gap-8">
-                      <div className="lg:col-span-2">
-                        <div className="text-eyebrow text-gold mb-3">How the project is funded</div>
-                        <h3 className="font-display text-[24px] leading-tight mb-3">Finance Mix</h3>
-                        <p className="text-[14px] text-muted-foreground leading-relaxed">
-                          Breakdown of capital sources contributing to the total project cost.
-                        </p>
-                      </div>
-                      <div className="lg:col-span-3 h-[280px]">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <BarChart data={ed.projectCost.financeBreakdown} layout="vertical" margin={{ left: 8, right: 30, top: 8, bottom: 0 }}>
-                            <defs>
-                              <linearGradient id="financeFill" x1="0" y1="0" x2="1" y2="0">
-                                <stop offset="0%" stopColor={NAVY} stopOpacity={0.95} />
-                                <stop offset="100%" stopColor={NAVY_LIGHT} stopOpacity={0.9} />
-                              </linearGradient>
-                            </defs>
-                            <CartesianGrid horizontal={false} stroke="hsl(220 16% 90%)" />
-                            <XAxis type="number" tick={axisTick} axisLine={false} tickLine={false} />
-                            <YAxis type="category" dataKey="label" tick={{ fill: NAVY, fontSize: 12 }} axisLine={false} tickLine={false} width={120} />
-                            <RechartsTooltip cursor={{ fill: "hsl(220 16% 95%)" }} contentStyle={tooltipStyle} />
-                            <Bar dataKey="amount" fill="url(#financeFill)" radius={[0, 6, 6, 0]} />
-                          </BarChart>
-                        </ResponsiveContainer>
-                      </div>
-                    </div>
-                  </motion.div>
-                )}
               </motion.div>
             )}
 
@@ -269,7 +242,7 @@ export default function Dashboard() {
             {/* ═══════════ LOAN SCHEDULE ═══════════ */}
             {activeTab === "loan" && <LoanSection ed={ed} verdict={v?.loan} isLoadingVerdict={isLoadingVerdicts} />}
 
-            {/* ═══════════ FINANCIAL EVALUATION (incl. SWOT) ═══════════ */}
+            {/* ═══════════ FINANCIAL EVALUATION ═══════════ */}
             {activeTab === "eval" && <EvaluationSection ed={ed} verdict={v?.evaluation} isLoadingVerdict={isLoadingVerdicts} />}
           </div>
         </main>
@@ -318,10 +291,11 @@ function ProfileSection({ report, ed, verdict, isLoadingVerdict }: { report: any
       <PageHeader eyebrow="The Business" title="Business Profile" description="Identity, leadership and operational footprint of the firm." />
       <SectionVerdict verdict={verdict} isLoading={isLoadingVerdict} />
 
+      {/* Profile cards — Business Profile + Proprietor Profile */}
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
         {/* Firm card (60%) */}
         <div className="lg:col-span-3 surface-card rounded-2xl p-8 md:p-9">
-          <div className="text-eyebrow text-gold mb-4">The Firm</div>
+          <div className="text-eyebrow text-muted-foreground mb-4">The Firm</div>
           <h2 className="font-display text-[28px] leading-[1.15] text-foreground mb-2">
             {report.firmName || "—"}
           </h2>
@@ -341,11 +315,11 @@ function ProfileSection({ report, ed, verdict, isLoadingVerdict }: { report: any
         </div>
 
         {/* Proprietor card (40%) */}
-        <div className="lg:col-span-2 surface-card rounded-2xl p-7 md:p-8 bg-gradient-to-br from-card to-muted/30">
-          <div className="text-eyebrow text-gold mb-5">The Proprietor</div>
+        <div className="lg:col-span-2 surface-card rounded-2xl p-7 md:p-8">
+          <div className="text-eyebrow text-muted-foreground mb-5">The Proprietor</div>
 
           <div className="flex items-start gap-4 mb-7 pb-7 border-b border-border">
-            <div className="flex-shrink-0 w-14 h-14 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-semibold text-base">
+            <div className="flex-shrink-0 w-14 h-14 rounded-full bg-brand text-white flex items-center justify-center font-semibold text-base">
               {initials}
             </div>
             <div className="min-w-0 flex-1 pt-1">
@@ -371,47 +345,168 @@ function ProfileSection({ report, ed, verdict, isLoadingVerdict }: { report: any
         </div>
       </div>
 
-      {/* Project cost items, if available */}
-      {ed?.projectCost?.items && ed.projectCost.items.length > 0 && (
-        <div className="mt-10">
-          <div className="text-eyebrow text-gold mb-3">Cost Composition</div>
-          <h3 className="font-display text-[22px] mb-5">Project Cost Components</h3>
-          <div className="surface-card rounded-2xl p-8">
-            <div className="space-y-2.5">
-              {ed.projectCost.items.map((it: any, i: number) => (
-                <CostRow key={i} label={it.label} amount={it.amount} max={Math.max(...ed.projectCost.items.map((x: any) => x.amount || 0))} />
-              ))}
-              {ed.projectCost.totalCost && (
-                <div className="flex justify-between items-center pt-4 mt-2 border-t border-border">
-                  <div className="text-eyebrow text-foreground">Total</div>
-                  <div className="font-display text-[20px] text-foreground num-tabular">
-                    ₹{ed.projectCost.totalCost.toLocaleString("en-IN")}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Employment — folded in as the operational footprint of the firm */}
-      <div className="mt-10">
+      {/* Project Cost & Finance · Finance Mix · Employment + KPIs */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-8 items-start">
+        <ProjectFinanceCard ed={ed} />
+        <FinanceMixPie ed={ed} />
         <EmploymentBlock ed={ed} />
       </div>
+
+      {/* SWOT Analysis — qualitative profile of the business */}
+      <div className="mt-12">
+        <SwotBlock ed={ed} />
+      </div>
+
+      {/* Implementation Timeline (rendered when extracted) */}
+      <ImplementationTimeline ed={ed} />
+
+      {/* Product Portfolio (rendered when extracted) */}
+      <ProductPortfolioTable ed={ed} />
     </SectionPage>
   );
 }
 
-function CostRow({ label, amount, max }: { label: string; amount: number | null; max: number }) {
-  const pct = amount && max ? (amount / max) * 100 : 0;
+function ProjectFinanceCard({ ed }: { ed: any }) {
+  const pc = ed?.projectCost;
+  const items: any[] = pc?.items || [];
+  const finance: any[] = pc?.financeBreakdown || [];
+  if (items.length === 0 && finance.length === 0) return null;
+  const financeTotal = finance.reduce((a, f) => a + (f.amount || 0), 0);
+
   return (
-    <div className="grid grid-cols-12 items-center gap-3 py-1.5">
-      <div className="col-span-4 text-[13px] text-foreground/85 truncate">{label}</div>
-      <div className="col-span-6 h-[6px] rounded-full bg-muted overflow-hidden">
-        <div className="h-full bg-gradient-to-r from-brand to-brand-dark rounded-full" style={{ width: `${pct}%` }} />
+    <div className="surface-card rounded-2xl p-7">
+      <h3 className="font-display text-[18px] mb-5">Project Cost &amp; Finance</h3>
+
+      {items.length > 0 && (
+        <div className="mb-6">
+          <div className="text-eyebrow text-muted-foreground mb-3">Cost of Project</div>
+          <div className="space-y-2">
+            {items.map((it, i) => (
+              <div key={i} className="flex justify-between items-baseline text-[13.5px]">
+                <span className="text-foreground/85">{it.label}</span>
+                <span className="font-semibold text-brand num-tabular">{fmtINR(it.amount)}</span>
+              </div>
+            ))}
+            {pc?.totalCost != null && (
+              <div className="flex justify-between items-baseline pt-2.5 mt-1.5 border-t border-border">
+                <span className="font-semibold text-foreground">Total Project Cost</span>
+                <span className="font-bold text-brand num-tabular">{fmtINR(pc.totalCost)}</span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {finance.length > 0 && (
+        <div>
+          <div className="text-eyebrow text-muted-foreground mb-3">Means of Finance</div>
+          <div className="space-y-2">
+            {finance.map((f, i) => (
+              <div key={i} className="flex justify-between items-baseline text-[13.5px]">
+                <span className="text-foreground/85">{f.label}</span>
+                <span className="font-semibold text-emerald-600 num-tabular">{fmtINR(f.amount)}</span>
+              </div>
+            ))}
+            <div className="flex justify-between items-baseline pt-2.5 mt-1.5 border-t border-border">
+              <span className="font-semibold text-foreground">Total</span>
+              <span className="font-bold text-emerald-700 num-tabular">{fmtINR(financeTotal)}</span>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FinanceMixPie({ ed }: { ed: any }) {
+  const finance: any[] = ed?.projectCost?.financeBreakdown || [];
+  if (finance.length === 0) return null;
+  const data = finance.map((f) => ({ name: f.label, value: f.amount || 0 }));
+
+  return (
+    <div className="surface-card rounded-2xl p-7">
+      <h3 className="font-display text-[18px] mb-1">Finance Mix</h3>
+      <p className="text-[12.5px] text-muted-foreground mb-3">Capital sources funding the project.</p>
+      <div className="h-[220px]">
+        <ResponsiveContainer width="100%" height="100%">
+          <PieChart>
+            <Pie data={data} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={82} innerRadius={44} paddingAngle={2}>
+              {data.map((_, i) => (
+                <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+              ))}
+            </Pie>
+            <RechartsTooltip contentStyle={tooltipStyle} formatter={(v: any) => fmtINR(v as number)} />
+          </PieChart>
+        </ResponsiveContainer>
       </div>
-      <div className="col-span-2 text-right text-[13px] num-tabular font-medium text-foreground">
-        {amount != null ? `₹${amount.toLocaleString("en-IN")}` : "—"}
+      <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-3 justify-center">
+        {data.map((d, i) => (
+          <div key={d.name} className="flex items-center gap-1.5 text-[11.5px]">
+            <span className="w-2 h-2 rounded-full" style={{ backgroundColor: PIE_COLORS[i % PIE_COLORS.length] }} />
+            <span className="text-muted-foreground">{d.name}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ImplementationTimeline({ ed }: { ed: any }) {
+  const phases: any[] = ed?.implementationTimeline;
+  if (!Array.isArray(phases) || phases.length === 0) return null;
+  const tones = [
+    "bg-blue-50 border-blue-200",
+    "bg-purple-50 border-purple-200",
+    "bg-amber-50 border-amber-200",
+    "bg-emerald-50 border-emerald-200",
+  ];
+  return (
+    <div className="mt-12">
+      <h3 className="font-display text-[22px] mb-5">Implementation Timeline</h3>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {phases.map((p, i) => (
+          <div key={i} className={`rounded-2xl border p-5 ${tones[i % tones.length]}`}>
+            <div className="font-semibold text-[15px] text-foreground mb-2">{p.phase || p.name || `Phase ${i + 1}`}</div>
+            {(p.startDate || p.start) && (
+              <div className="text-[12px] text-muted-foreground">{p.startDate || p.start}</div>
+            )}
+            <div className="text-[13px] font-medium text-foreground">{p.endDate || p.end || p.status || ""}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ProductPortfolioTable({ ed }: { ed: any }) {
+  const products: any[] = ed?.productPortfolio || ed?.businessProfile?.productPortfolio;
+  if (!Array.isArray(products) || products.length === 0) return null;
+  return (
+    <div className="mt-12">
+      <h3 className="font-display text-[22px] mb-5">Product Portfolio</h3>
+      <div className="surface-card rounded-2xl overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-primary">
+                <th className="text-eyebrow text-white/85 py-3.5 px-4 text-left w-16">S.No</th>
+                <th className="text-eyebrow text-white/85 py-3.5 px-4 text-left">Product</th>
+                <th className="text-eyebrow text-white/85 py-3.5 px-4 text-right">Production Capacity / Annum</th>
+              </tr>
+            </thead>
+            <tbody>
+              {products.map((p, i) => (
+                <tr key={i} className={`border-t border-border ${i % 2 === 1 ? "bg-muted/40" : ""}`}>
+                  <td className="py-3 px-4 text-[13.5px] text-muted-foreground">{i + 1}</td>
+                  <td className="py-3 px-4 text-[13.5px] font-medium text-foreground">{p.product || p.name || p.label}</td>
+                  <td className="py-3 px-4 text-[13.5px] text-right font-semibold text-brand num-tabular">
+                    {p.capacity || p.productionCapacity || p.value || "—"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
@@ -855,10 +950,7 @@ function ThresholdGaugesBlock({ fe }: { fe: any }) {
 
 function EvaluationSection({ ed, verdict, isLoadingVerdict }: { ed: any; verdict?: string | null; isLoadingVerdict?: boolean }) {
   const fe = ed?.financialEvaluation;
-  const sw = ed?.swotAnalysis;
-  // Render if EITHER quantitative or qualitative evidence exists —
-  // SWOT must remain reachable even when financialEvaluation is missing.
-  if (!fe && !sw) return (
+  if (!fe) return (
     <SectionPage>
       <PageHeader eyebrow="Quality" title="Financial Evaluation" />
       <SectionVerdict verdict={verdict} isLoading={isLoadingVerdict} />
@@ -866,7 +958,7 @@ function EvaluationSection({ ed, verdict, isLoadingVerdict }: { ed: any; verdict
     </SectionPage>
   );
 
-  const groups = fe ? [
+  const groups = [
     {
       title: "Capital Returns",
       eyebrow: "Returns",
@@ -896,7 +988,7 @@ function EvaluationSection({ ed, verdict, isLoadingVerdict }: { ed: any; verdict
         { label: "Average DSCR", value: fe.averageDscr, description: "Debt service coverage" },
       ],
     },
-  ] : [];
+  ];
 
   return (
     <SectionPage>
@@ -922,16 +1014,13 @@ function EvaluationSection({ ed, verdict, isLoadingVerdict }: { ed: any; verdict
             </div>
           );
         })}
-
-        {/* SWOT — folded in as the qualitative companion to the quantitative verdict */}
-        <SwotBlock ed={ed} />
       </div>
     </SectionPage>
   );
 }
 
-// Sub-block rendered inside Financial Evaluation as the qualitative
-// companion to the quantitative verdict. Not a standalone section.
+// Block rendered inside Business Profile — the qualitative profile of
+// the business, mirroring the old dashboard's SWOT placement.
 function SwotBlock({ ed }: { ed: any }) {
   const sw = ed?.swotAnalysis;
   if (!sw) return null;
@@ -943,10 +1032,10 @@ function SwotBlock({ ed }: { ed: any }) {
   ];
   return (
     <div>
-      <div className="text-eyebrow text-gold mb-4">Qualitative Verdict</div>
+      <div className="text-eyebrow text-muted-foreground mb-4">Qualitative Profile</div>
       <h3 className="font-display text-[22px] mb-2">SWOT Analysis</h3>
       <p className="text-[13.5px] text-muted-foreground mb-5 max-w-2xl">
-        The qualitative companion to the financial evaluation — internal capabilities mapped against external forces.
+        Internal capabilities of the business mapped against the external forces it operates within.
       </p>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
         {quads.map((q) => (
@@ -1085,60 +1174,60 @@ function LoanSection({ ed, verdict, isLoadingVerdict }: { ed: any; verdict?: str
   );
 }
 
-// Sub-block rendered inside Business Profile — operational footprint
-// (jobs created) as a descriptor of the firm, not a separate section.
+// Card rendered inside Business Profile — operational footprint
+// (jobs created) plus the headline KPIs, as in the old dashboard.
 function EmploymentBlock({ ed }: { ed: any }) {
   const emp = ed?.employmentGeneration;
-  if (!emp) return null;
+  const fe = ed?.financialEvaluation;
+  const fs = ed?.financialSummary;
 
-  const total = (emp.totalDirect || 0) + (emp.indirect || 0);
-  const segments = [
-    { label: "Skilled", value: emp.skilled || 0, color: NAVY },
-    { label: "Semi-Skilled", value: emp.semiSkilled || 0, color: NAVY_LIGHT },
-    { label: "Unskilled", value: emp.unskilled || 0, color: "hsl(218 25% 70%)" },
-    { label: "Indirect", value: emp.indirect || 0, color: GOLD },
-  ].filter((s) => s.value > 0);
-  const segmentTotal = segments.reduce((a, b) => a + b.value, 0) || 1;
+  const tiles = [
+    { label: "Total Direct", value: emp?.totalDirect, cls: "bg-blue-50 text-blue-700" },
+    { label: "Indirect", value: emp?.indirect, cls: "bg-emerald-50 text-emerald-700" },
+    { label: "Skilled", value: emp?.skilled, cls: "bg-orange-50 text-orange-700" },
+    { label: "Semi-Skilled", value: emp?.semiSkilled, cls: "bg-amber-50 text-amber-700" },
+    { label: "Unskilled", value: emp?.unskilled, cls: "bg-slate-100 text-slate-700" },
+  ].filter((t) => t.value != null);
 
-  if (total === 0 && segments.length === 0) return null;
+  const kpis = [
+    { label: "Average DSCR", value: fe?.averageDscr || fs?.averageDscr },
+    { label: "IRR", value: fe?.irr },
+    { label: "MIRR", value: fe?.mirr },
+    { label: "WACC", value: fe?.wacc },
+    { label: "NPV", value: fe?.npv },
+    { label: "Payback (Simple)", value: fe?.simplePaybackPeriod },
+  ].filter((k) => k.value);
+
+  if (tiles.length === 0 && kpis.length === 0) return null;
 
   return (
-    <div>
-      <div className="text-eyebrow text-gold mb-3">Operational Footprint</div>
-      <h3 className="font-display text-[22px] mb-5">Employment Generation</h3>
-      <div className="surface-card rounded-2xl p-8 grid lg:grid-cols-5 gap-8 items-center">
-        <div className="lg:col-span-2 text-center lg:text-left">
-          <div className="text-eyebrow text-muted-foreground mb-2">Total Jobs Created</div>
-          <div className="font-display text-[56px] leading-none text-foreground num-tabular">{total || "—"}</div>
-          <div className="text-[13px] text-muted-foreground mt-3">
-            {emp.totalDirect ? `${emp.totalDirect} direct` : ""}
-            {emp.totalDirect && emp.indirect ? " · " : ""}
-            {emp.indirect ? `${emp.indirect} indirect` : ""}
-          </div>
+    <div className="surface-card rounded-2xl p-7">
+      <h3 className="font-display text-[18px] mb-4">Employment Generation</h3>
+
+      {tiles.length > 0 && (
+        <div className="grid grid-cols-2 gap-3 mb-6">
+          {tiles.map((t) => (
+            <div key={t.label} className={`rounded-xl p-4 ${t.cls}`}>
+              <div className="font-display text-[26px] leading-none num-tabular">{t.value}</div>
+              <div className="text-[11px] mt-1.5 font-medium opacity-80">{t.label}</div>
+            </div>
+          ))}
         </div>
-        {segments.length > 0 && (
-          <div className="lg:col-span-3">
-            <div className="flex h-3 rounded-full overflow-hidden">
-              {segments.map((s) => (
-                <div
-                  key={s.label}
-                  style={{ width: `${(s.value / segmentTotal) * 100}%`, backgroundColor: s.color }}
-                  title={`${s.label}: ${s.value}`}
-                />
-              ))}
-            </div>
-            <div className="flex flex-wrap gap-x-5 gap-y-2 mt-4">
-              {segments.map((s) => (
-                <div key={s.label} className="flex items-center gap-2 text-[12px]">
-                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: s.color }} />
-                  <span className="text-muted-foreground">{s.label}</span>
-                  <span className="font-semibold text-foreground num-tabular">{s.value}</span>
-                </div>
-              ))}
-            </div>
+      )}
+
+      {kpis.length > 0 && (
+        <>
+          <div className="text-eyebrow text-muted-foreground mb-2">Key KPIs</div>
+          <div className="divide-y divide-border">
+            {kpis.map((k) => (
+              <div key={k.label} className="flex justify-between py-2 text-[13.5px]">
+                <span className="text-muted-foreground">{k.label}</span>
+                <span className="font-semibold text-foreground num-tabular">{k.value}</span>
+              </div>
+            ))}
           </div>
-        )}
-      </div>
+        </>
+      )}
     </div>
   );
 }
