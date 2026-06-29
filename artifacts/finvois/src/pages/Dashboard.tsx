@@ -35,7 +35,6 @@ import { ChartFrame } from "@/components/report/ChartFrame";
 import { MetricCard } from "@/components/report/MetricCard";
 import { DataTable } from "@/components/report/DataTable";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ProfitabilityWaterfall } from "@/components/report/ProfitabilityWaterfall";
 import { WorkingCapitalChart } from "@/components/report/WorkingCapitalChart";
 import { CapitalStructureChart } from "@/components/report/CapitalStructureChart";
 import { DscrAmortizationChart } from "@/components/report/DscrAmortizationChart";
@@ -47,10 +46,8 @@ import {
   insightCashFlow,
   insightRatios,
   insightLoan,
-  plLatestMetrics,
   meanFinite,
   insightFinancialSnapshot,
-  insightWaterfall,
   insightWorkingCapital,
   insightCapitalStructure,
   insightDscrAmortization,
