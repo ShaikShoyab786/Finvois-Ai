@@ -69,6 +69,9 @@ const NAV: NavSection[] = [
       { id: "cashflow", label: "Cash Flow" },
       { id: "loan", label: "Loan Schedule" },
       { id: "eval", label: "Financial Evaluation" },
+      { id: "altman", label: "Altman Z-Score" },
+      { id: "bep", label: "BEP & Sensitivity" },
+      { id: "mpbf", label: "MPBF Assessment" },
     ],
   },
 ];
@@ -113,6 +116,30 @@ const tooltipStyle = {
 };
 
 const axisTick = { fill: SLATE, fontSize: 11 };
+
+// ─── Shared helpers for DSCR / Altman / BEP / MPBF sections ──────────
+// Shorten DPR fiscal-period labels: "2025-26 Sep to Mar" -> "2025-26*".
+const shortYear = (y: string): string => {
+  const m = /(\d{4}-\d{2})/.exec(y || "");
+  if (!m) return y || "—";
+  return /sep|oct|nov|to|month/i.test(y) ? `${m[1]}*` : m[1];
+};
+// Rupees -> "₹X.XXL" (lakhs) for KPI tiles.
+const toL = (n: number | null | undefined): string =>
+  n == null || !isFinite(n) ? "—" : `₹${(n / 1e5).toFixed(2)}L`;
+// Rupees with Indian grouping, no decimals.
+const rupee = (n: number | null | undefined): string =>
+  n == null || !isFinite(n) ? "—" : new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 }).format(Math.round(n));
+const fmt2 = (n: number | null | undefined): string =>
+  n == null || !isFinite(n) ? "—" : n.toFixed(2);
+const fmtPct = (n: number | null | undefined): string =>
+  n == null || !isFinite(n) ? "—" : `${n.toFixed(2)}%`;
+const sumFinite = (a: (number | null | undefined)[]): number =>
+  (a || []).reduce<number>((s, x) => (x != null && isFinite(x) ? s + x : s), 0);
+// ₹-Lacs axis tick formatter (values already divided by 1e5).
+const fmtAxisL = (v: number): string => `${Math.abs(v) >= 10 ? Math.round(v) : +Number(v).toFixed(1)}L`;
+type Zone = "distress" | "grey" | "safe";
+const altmanZone = (z: number): Zone => (z < 1.81 ? "distress" : z < 2.99 ? "grey" : "safe");
 
 export default function Dashboard() {
   const params = useParams();
@@ -259,6 +286,9 @@ export default function Dashboard() {
 
             {/* ═══════════ FINANCIAL EVALUATION ═══════════ */}
             {activeTab === "eval" && <EvaluationSection ed={ed} verdict={v?.evaluation} isLoadingVerdict={isLoadingVerdicts} />}
+            {activeTab === "altman" && <AltmanSection ed={ed} />}
+            {activeTab === "bep" && <BreakEvenSection ed={ed} />}
+            {activeTab === "mpbf" && <MpbfSection ed={ed} />}
           </div>
         </main>
       </div>
@@ -2345,97 +2375,783 @@ function SwotQuad({ title, items, tone, sub }: { title: string; items?: string[]
   );
 }
 
+// Transposed matrix table (particulars in rows, fiscal years in columns).
+// Shared by BEP and MPBF sections.
+type MatrixRow = {
+  label: string;
+  values?: (number | null | undefined)[];
+  fmt?: (n: number | null | undefined) => string;
+  kind?: "section";
+  bold?: boolean;
+  indent?: boolean;
+  tone?: "blue" | "rose" | "emerald";
+};
+function MatrixTable({ years, rows, firstColLabel = "Particulars" }: { years: string[]; rows: MatrixRow[]; firstColLabel?: string }) {
+  return (
+    <div className="surface-card rounded-2xl overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="bg-primary">
+              <th className="text-eyebrow text-white/85 py-3.5 px-4 text-left whitespace-nowrap">{firstColLabel}</th>
+              {years.map((y, i) => (
+                <th key={i} className="text-eyebrow text-white/85 text-right px-4 whitespace-nowrap">{shortYear(y)}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r, ri) => {
+              if (r.kind === "section") {
+                return (
+                  <tr key={ri} className="bg-muted/60 border-t border-border">
+                    <td colSpan={years.length + 1} className="text-eyebrow text-muted-foreground/90 px-4 py-2">{r.label}</td>
+                  </tr>
+                );
+              }
+              const fmt = r.fmt || rupee;
+              const toneCls = r.tone === "blue" ? "text-brand" : r.tone === "rose" ? "text-rose-600" : r.tone === "emerald" ? "text-emerald-600" : "text-foreground";
+              return (
+                <tr key={ri} className={`border-t border-border ${r.bold ? "bg-muted/30" : ""}`}>
+                  <td className={`text-[13px] py-2.5 px-4 whitespace-nowrap ${r.bold ? "font-semibold" : ""} ${r.indent ? "pl-8 text-foreground/80" : ""}`}>{r.label}</td>
+                  {years.map((_, ci) => (
+                    <td key={ci} className={`text-right num-tabular text-[13px] px-4 ${r.bold ? "font-semibold" : ""} ${toneCls}`}>{fmt(r.values?.[ci])}</td>
+                  ))}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════ LOAN SCHEDULE — DSCR layout ═══════════
+// Derives a YEARLY term-loan amortization + DSCR table from clean yearly
+// arrays (balanceSheet.termLoans = closing balances, plAccount.interestTermLoan,
+// ratioAnalysis.dscr). The raw loanSchedule.schedule is monthly (84 rows), so it
+// is intentionally not used for the per-year view.
 function LoanSection({ ed, verdict, isLoadingVerdict }: { ed: any; verdict?: string | null; isLoadingVerdict?: boolean }) {
   const loan = ed?.loanSchedule;
-  if (!loan?.schedule?.length) return (
-    <SectionPage>
-      <PageHeader eyebrow="Operations" title="Loan Schedule" />
-      <SectionVerdict verdict={verdict} isLoading={isLoadingVerdict} />
-      <EmptyState />
-    </SectionPage>
-  );
+  const bs = ed?.balanceSheet;
+  const pl = ed?.plAccount;
+  const ra = ed?.ratioAnalysis;
+  const years: string[] = bs?.years || pl?.years || [];
+  const closing: number[] | undefined = bs?.termLoans;
 
-  const chartData = loan.schedule.map((r: any) => ({
-    year: r.year,
-    Principal: r.principal || 0,
-    Interest: r.interest || 0,
-    "Closing Balance": r.closingBalance || 0,
-  }));
-  const insight = insightLoan(loan);
+  if (!years.length || !Array.isArray(closing) || !closing.length) {
+    return (
+      <SectionPage>
+        <PageHeader eyebrow="Debt Servicing" title="Loan Schedule" />
+        <SectionVerdict verdict={verdict} isLoading={isLoadingVerdict} />
+        <EmptyState />
+      </SectionPage>
+    );
+  }
+
+  const principalAmt = parseNumeric(loan?.termLoanAmount) || closing[0] || 0;
+  const opening = closing.map((_, i) => (i === 0 ? principalAmt : closing[i - 1]));
+  const principal = opening.map((o, i) => Math.max(0, o - closing[i]));
+  const interest: number[] = pl?.interestTermLoan || [];
+  const debtService = principal.map((p, i) => p + (interest[i] || 0)); // B
+  const dscr: (number | null)[] = ra?.dscr || [];
+  const netInflow = debtService.map((b, i) => (dscr[i] != null ? (dscr[i] as number) * b : null)); // A
+
+  const totalPrincipal = sumFinite(principal);
+  const totalInterest = sumFinite(interest);
+  // Average DSCR over the loan period — simple mean, but excluding anomalous
+  // fully-repaid final years (DSCR balloons to ~100+ when debt service ≈ 0).
+  const dscrSane = dscr.filter((d): d is number => d != null && isFinite(d) && d <= 10);
+  const avgDscr = dscrSane.length ? dscrSane.reduce((a, b) => a + b, 0) / dscrSane.length : NaN;
+
+  const rateNum = parseNumeric(loan?.interestRate) ?? NaN;
+  const rateLabel = isFinite(rateNum) && rateNum > 0 ? `${rateNum % 1 === 0 ? rateNum : +rateNum.toFixed(2)}%` : (loan?.interestRate || "");
+  const tenureRaw: string = loan?.tenure || "";
+  const tenNum = parseNumeric(tenureRaw) ?? NaN;
+  const tenureYears = /month/i.test(tenureRaw) ? tenNum / 12 : tenNum;
+  const tenureLabel = isFinite(tenureYears) && tenureYears > 0 ? `${Math.round(tenureYears)} Years` : tenureRaw;
+
+  const piData = years.map((y, i) => ({ year: shortYear(y), Principal: principal[i] / 1e5, Interest: (interest[i] || 0) / 1e5 }));
+  const balData = years.map((y, i) => ({ year: shortYear(y), Opening: opening[i] / 1e5, Closing: closing[i] / 1e5 }));
+  const dscrData = years.map((y, i) => ({ year: shortYear(y), DSCR: dscr[i] ?? null }));
+  const dsData = years.map((y, i) => ({ year: shortYear(y), "Debt Service": debtService[i] / 1e5 }));
+
+  // Final loan years can show anomalous DSCR (loan fully repaid → tiny debt service
+  // inflates the ratio to ~100+). Cap the chart axis for readability; the table keeps raw values.
+  const dscrFinite = dscr.filter((d): d is number => d != null && isFinite(d));
+  const dscrMax = dscrFinite.length ? Math.max(...dscrFinite) : 0;
+  const dscrCap = Math.min(Math.max(dscrMax, 3), 8);
+  const hasDscrOutlier = dscrMax > dscrCap + 0.001;
+
+  const avgTxt = avgDscr;
+  const dscrNote = !isFinite(avgTxt)
+    ? "DSCR data was not available in this DPR, so debt-servicing capacity could not be assessed automatically."
+    : `An average DSCR of ${fmt2(avgTxt)} over the loan period indicates the project generates about ${avgTxt.toFixed(1)}× the cash required to service its debt. ` +
+      (avgTxt >= 1.75
+        ? "This sits comfortably above the 1.5–2.0× banking comfort band and demonstrates strong repayment capacity."
+        : avgTxt >= 1.2
+        ? "This clears the 1.2× banking floor but leaves only a modest cushion."
+        : "This is below the 1.2× banking floor and signals potential repayment stress.");
 
   return (
     <SectionPage>
-      <PageHeader eyebrow="Operations" title="Loan Schedule" description="Amortization plan — principal repayment, interest burden, and outstanding balance over time." />
+      <PageHeader eyebrow="Debt Servicing" title="Term Loan Repayment Schedule" description={`DSCR Analysis — Term Loan ${toL(principalAmt)}${rateLabel ? ` @ ${rateLabel} p.a.` : ""}${tenureLabel ? ` | Repayment: ${tenureLabel}` : ""}`} />
       <SectionVerdict verdict={verdict} isLoading={isLoadingVerdict} />
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        <KpiTile label="Term Loan" value={loan.termLoanAmount} variant="card" />
-        <KpiTile label="Interest Rate" value={loan.interestRate} variant="card" />
-        <KpiTile label="Tenure" value={loan.tenure} variant="card" />
-        <KpiTile label="Moratorium" value={loan.moratorium} variant="card" />
+        <div className="surface-card rounded-xl px-6 py-5 bg-brand/[0.04]">
+          <div className="font-display text-[26px] leading-[1.1] text-brand num-tabular">{toL(principalAmt)}</div>
+          <div className="text-eyebrow text-muted-foreground mt-2">Loan Amount</div>
+          <div className="text-[11px] text-muted-foreground/70 mt-0.5">{rateLabel ? `@ ${rateLabel} p.a.` : "Term loan"}</div>
+        </div>
+        <div className="surface-card rounded-xl px-6 py-5 bg-emerald-50/50">
+          <div className="font-display text-[26px] leading-[1.1] text-emerald-600 num-tabular">{toL(totalPrincipal)}</div>
+          <div className="text-eyebrow text-muted-foreground mt-2">Total Principal Repaid</div>
+          <div className="text-[11px] text-muted-foreground/70 mt-0.5">{tenureLabel ? `Over ${tenureLabel.toLowerCase()}` : "Over loan tenure"}</div>
+        </div>
+        <div className="surface-card rounded-xl px-6 py-5 bg-amber-50/50">
+          <div className="font-display text-[26px] leading-[1.1] text-amber-600 num-tabular">{toL(totalInterest)}</div>
+          <div className="text-eyebrow text-muted-foreground mt-2">Total Interest Paid</div>
+          <div className="text-[11px] text-muted-foreground/70 mt-0.5">{tenureLabel ? `Over ${tenureLabel.toLowerCase()}` : "Over loan tenure"}</div>
+        </div>
+        <div className="surface-card rounded-xl px-6 py-5 bg-violet-50/50">
+          <div className="font-display text-[26px] leading-[1.1] text-violet-600 num-tabular">{isFinite(avgTxt) ? `${fmt2(avgTxt)}x` : "—"}</div>
+          <div className="text-eyebrow text-muted-foreground mt-2">Average DSCR</div>
+          <div className="text-[11px] text-muted-foreground/70 mt-0.5">Ideal: 1.75–3.0x</div>
+        </div>
       </div>
 
-      <ChartFrame
-        eyebrow="Amortization"
-        title="Repayment curve"
-        description="Annual principal & interest bars against the descending outstanding balance curve."
-        chartHeight={340}
-        footer={<InsightCaption text={insight} />}
-      >
-        <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
-            <CartesianGrid vertical={false} stroke="hsl(220 16% 90%)" />
-            <XAxis dataKey="year" tick={axisTick} axisLine={false} tickLine={false} />
-            <YAxis yAxisId="left" tick={axisTick} axisLine={false} tickLine={false} />
-            <YAxis yAxisId="right" orientation="right" tick={axisTick} axisLine={false} tickLine={false} />
-            <RechartsTooltip contentStyle={tooltipStyle} />
-            <Legend wrapperStyle={{ fontSize: 12, paddingTop: 12 }} iconType="circle" />
-            <Bar yAxisId="left" dataKey="Principal" stackId="emi" fill={NAVY} radius={[0, 0, 0, 0]} maxBarSize={28} />
-            <Bar yAxisId="left" dataKey="Interest" stackId="emi" fill={GOLD} radius={[4, 4, 0, 0]} maxBarSize={28} />
-            <Line yAxisId="right" type="monotone" dataKey="Closing Balance" stroke={ROSE} strokeWidth={2.5} dot={{ r: 3, fill: ROSE }} />
-          </ComposedChart>
-        </ResponsiveContainer>
-      </ChartFrame>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <ChartFrame eyebrow="Amortization" title="Principal vs Interest Payment (₹ Lacs)" chartHeight={300}>
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={piData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+              <CartesianGrid vertical={false} stroke="hsl(220 16% 90%)" />
+              <XAxis dataKey="year" tick={axisTick} axisLine={false} tickLine={false} interval={0} angle={-20} textAnchor="end" height={50} />
+              <YAxis tick={axisTick} axisLine={false} tickLine={false} tickFormatter={fmtAxisL} />
+              <RechartsTooltip contentStyle={tooltipStyle} formatter={(v: number) => `₹${(+v).toFixed(2)}L`} />
+              <Legend wrapperStyle={{ fontSize: 12, paddingTop: 8 }} iconType="circle" />
+              <Bar dataKey="Principal" fill={NAVY} radius={[3, 3, 0, 0]} maxBarSize={26} />
+              <Bar dataKey="Interest" fill={ROSE} radius={[3, 3, 0, 0]} maxBarSize={26} />
+            </BarChart>
+          </ResponsiveContainer>
+        </ChartFrame>
 
-      {/* Layer 2b — the banker's coverage view: does operating cash service the EMI? */}
-      <div className="h-6" />
-      <ChartFrame
-        eyebrow="Coverage Check"
-        title="Operating cash vs EMI · with DSCR overlay"
-        description="EMI burden (bars) against operating cash available (line), with the DSCR ratio overlaid on the right axis and the 1.2× banking floor as a reference."
-        chartHeight={360}
-        footer={<InsightCaption text={insightDscrAmortization(loan, ed?.cashFlow, ed?.ratioAnalysis)} />}
-      >
-        <DscrAmortizationChart loan={loan} cf={ed?.cashFlow} ra={ed?.ratioAnalysis} />
-      </ChartFrame>
+        <ChartFrame eyebrow="Outstanding" title="Loan Balance — Opening vs Closing (₹ Lacs)" chartHeight={300}>
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={balData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+              <defs>
+                <linearGradient id="loanOpen" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={NAVY} stopOpacity={0.25} />
+                  <stop offset="100%" stopColor={NAVY} stopOpacity={0.02} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid vertical={false} stroke="hsl(220 16% 90%)" />
+              <XAxis dataKey="year" tick={axisTick} axisLine={false} tickLine={false} interval={0} angle={-20} textAnchor="end" height={50} />
+              <YAxis tick={axisTick} axisLine={false} tickLine={false} tickFormatter={fmtAxisL} />
+              <RechartsTooltip contentStyle={tooltipStyle} formatter={(v: number) => `₹${(+v).toFixed(2)}L`} />
+              <Legend wrapperStyle={{ fontSize: 12, paddingTop: 8 }} iconType="circle" />
+              <Area type="monotone" dataKey="Opening" stroke={NAVY} strokeWidth={2.5} fill="url(#loanOpen)" dot={{ r: 3, fill: NAVY }} />
+              <Area type="monotone" dataKey="Closing" stroke={EMERALD} strokeWidth={2.5} fill="transparent" dot={{ r: 3, fill: EMERALD }} />
+            </AreaChart>
+          </ResponsiveContainer>
+        </ChartFrame>
+
+        <ChartFrame eyebrow="Coverage" title="DSCR Year-Wise" description={`Debt Service Coverage Ratio (A/B).${hasDscrOutlier ? " Final fully-repaid years exceed the axis and are capped for readability — see table for exact figures." : ""}`} chartHeight={300}>
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={dscrData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+              <CartesianGrid vertical={false} stroke="hsl(220 16% 90%)" />
+              <XAxis dataKey="year" tick={axisTick} axisLine={false} tickLine={false} interval={0} angle={-20} textAnchor="end" height={50} />
+              <YAxis tick={axisTick} axisLine={false} tickLine={false} domain={[0, dscrCap]} allowDataOverflow />
+              <RechartsTooltip contentStyle={tooltipStyle} formatter={(v: number) => `${(+v).toFixed(2)}x`} />
+              <ReferenceLine y={1.2} stroke={ROSE} strokeDasharray="4 4" />
+              <Line type="monotone" dataKey="DSCR" stroke={PURPLE} strokeWidth={2.5} dot={{ r: 3, fill: PURPLE }} />
+            </LineChart>
+          </ResponsiveContainer>
+        </ChartFrame>
+
+        <ChartFrame eyebrow="Outflow" title="Total Debt Service (Principal + Interest) (₹ Lacs)" description="Annual outflow to service the term loan." chartHeight={300}>
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={dsData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+              <CartesianGrid vertical={false} stroke="hsl(220 16% 90%)" />
+              <XAxis dataKey="year" tick={axisTick} axisLine={false} tickLine={false} interval={0} angle={-20} textAnchor="end" height={50} />
+              <YAxis tick={axisTick} axisLine={false} tickLine={false} tickFormatter={fmtAxisL} />
+              <RechartsTooltip contentStyle={tooltipStyle} formatter={(v: number) => `₹${(+v).toFixed(2)}L`} />
+              <Bar dataKey="Debt Service" fill={NAVY} radius={[3, 3, 0, 0]} maxBarSize={30} />
+            </BarChart>
+          </ResponsiveContainer>
+        </ChartFrame>
+      </div>
 
       <div className="mt-6 surface-card rounded-2xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-primary">
-                <th className="text-eyebrow text-white/85 py-3.5 px-4 text-left">Year</th>
-                <th className="text-eyebrow text-white/85 text-right px-4">Opening</th>
-                <th className="text-eyebrow text-white/85 text-right px-4">Principal</th>
-                <th className="text-eyebrow text-white/85 text-right px-4">Interest</th>
-                <th className="text-eyebrow text-white/85 text-right px-4">Total EMI</th>
-                <th className="text-eyebrow text-white/85 text-right px-4">Closing</th>
+                <th className="text-eyebrow text-white/85 py-3.5 px-4 text-left whitespace-nowrap">Year</th>
+                <th className="text-eyebrow text-white/85 text-right px-4 whitespace-nowrap">Opening Balance</th>
+                <th className="text-eyebrow text-white/85 text-right px-4 whitespace-nowrap">Interest{rateLabel ? ` @ ${rateLabel}` : ""}</th>
+                <th className="text-eyebrow text-white/85 text-right px-4 whitespace-nowrap">Principal Repaid</th>
+                <th className="text-eyebrow text-white/85 text-right px-4 whitespace-nowrap">Total Repayment</th>
+                <th className="text-eyebrow text-white/85 text-right px-4 whitespace-nowrap">Closing Balance</th>
+                <th className="text-eyebrow text-white/85 text-right px-4 whitespace-nowrap">Net Cash Inflow (A)</th>
+                <th className="text-eyebrow text-white/85 text-right px-4 whitespace-nowrap">Total Debt Service (B)</th>
+                <th className="text-eyebrow text-white/85 text-right px-4 whitespace-nowrap">DSCR (A/B)</th>
               </tr>
             </thead>
             <tbody>
-              {loan.schedule.map((row: any, i: number) => (
-                <tr key={i} className={`border-t border-border ${i % 2 === 1 ? "bg-muted/40" : ""}`}>
-                  <td className="font-medium text-[13.5px] py-3 px-4">{row.year}</td>
-                  <td className="text-right num-tabular text-[13.5px] px-4">{fmtNum(row.openingBalance)}</td>
-                  <td className="text-right num-tabular text-[13.5px] px-4">{fmtNum(row.principal)}</td>
-                  <td className="text-right num-tabular text-[13.5px] px-4">{fmtNum(row.interest)}</td>
-                  <td className="text-right num-tabular text-[13.5px] font-semibold px-4">{fmtNum(row.totalEmi)}</td>
-                  <td className="text-right num-tabular text-[13.5px] px-4">{fmtNum(row.closingBalance)}</td>
+              {years.map((y, i) => (
+                <tr key={i} className={`border-t border-border ${i % 2 === 1 ? "bg-muted/30" : ""}`}>
+                  <td className="font-medium text-[13px] py-3 px-4 whitespace-nowrap">{shortYear(y)}</td>
+                  <td className="text-right num-tabular text-[13px] px-4">{rupee(opening[i])}</td>
+                  <td className="text-right num-tabular text-[13px] px-4 text-rose-600">{rupee(interest[i])}</td>
+                  <td className="text-right num-tabular text-[13px] px-4 text-brand">{rupee(principal[i])}</td>
+                  <td className="text-right num-tabular text-[13px] px-4">{rupee(debtService[i])}</td>
+                  <td className={`text-right num-tabular text-[13px] px-4 ${closing[i] > 0 ? "text-emerald-600" : "text-muted-foreground"}`}>{rupee(closing[i])}</td>
+                  <td className="text-right num-tabular text-[13px] px-4">{rupee(netInflow[i])}</td>
+                  <td className="text-right num-tabular text-[13px] px-4">{rupee(debtService[i])}</td>
+                  <td className="text-right num-tabular text-[13px] px-4 font-semibold text-brand">{dscr[i] != null ? `${fmt2(dscr[i] as number)}x` : "—"}</td>
                 </tr>
               ))}
             </tbody>
+            <tfoot>
+              <tr className="bg-primary text-white">
+                <td className="text-eyebrow text-white/90 py-3.5 px-4" colSpan={7}>Average</td>
+                <td className="text-right text-eyebrow text-white/90 px-4 whitespace-nowrap">Avg DSCR (Loan Period)</td>
+                <td className="text-right num-tabular text-[14px] font-semibold px-4">{isFinite(avgDscr) ? `${fmt2(avgDscr)}x` : "—"}</td>
+              </tr>
+            </tfoot>
           </table>
         </div>
+        <div className="px-5 py-4 bg-emerald-50/60 border-t border-emerald-100">
+          <span className="text-[12.5px] font-semibold text-emerald-800">DSCR Interpretation: </span>
+          <span className="text-[12.5px] text-emerald-900/80 leading-relaxed">{dscrNote}</span>
+        </div>
+      </div>
+    </SectionPage>
+  );
+}
+
+// ═══════════ ALTMAN Z-SCORE ═══════════
+function AltmanSection({ ed }: { ed: any }) {
+  const az = ed?.altmanZScore;
+  const bs = ed?.balanceSheet;
+  const pl = ed?.plAccount;
+
+  let years: string[] = [];
+  let A: number[] = [], B: number[] = [], C: number[] = [], D: number[] = [], E: number[] = [], Z: number[] = [];
+  let computed = false;
+
+  if (az && Array.isArray(az.zScore) && az.zScore.length) {
+    years = az.years || bs?.years || [];
+    A = az.workingCapitalToTotalAssets || [];
+    B = az.earningsToTotalAssets || [];
+    C = az.ebitToTotalAssets || [];
+    D = az.equityToTotalLiabilities || [];
+    E = az.salesToTotalAssets || [];
+    Z = az.zScore;
+  } else if (bs?.totalAssets && pl?.revenue) {
+    // Fallback: compute from balance sheet + P&L (original Altman formula).
+    computed = true;
+    years = bs.years || [];
+    const TA: number[] = bs.totalAssets || [];
+    const NWC: number[] = bs.netWorkingCapital || [];
+    const EBT: number[] = pl.ebt || [];
+    const EBIT: number[] = pl.ebit || [];
+    const EQ: number[] = bs.equity || [];
+    const SALES: number[] = pl.revenue || [];
+    const TL: number[] = (bs.termLoans || []).map((t: number, i: number) => (t || 0) + (bs.currentLiabilities?.[i] || 0));
+    A = TA.map((ta, i) => (ta ? (NWC[i] || 0) / ta : NaN));
+    B = TA.map((ta, i) => (ta ? (EBT[i] || 0) / ta : NaN));
+    C = TA.map((ta, i) => (ta ? (EBIT[i] || 0) / ta : NaN));
+    D = TL.map((tl, i) => (tl ? (EQ[i] || 0) / tl : NaN));
+    E = TA.map((ta, i) => (ta ? (SALES[i] || 0) / ta : NaN));
+    Z = A.map((a, i) => 1.2 * a + 1.4 * B[i] + 3.3 * C[i] + 0.6 * D[i] + 1.0 * E[i]);
+  }
+
+  if (!years.length || !Z.length) {
+    return (
+      <SectionPage>
+        <PageHeader eyebrow="Solvency" title="Altman Z-Score Analysis" />
+        <EmptyState />
+      </SectionPage>
+    );
+  }
+
+  const zoneCls: Record<Zone, { card: string; text: string; sub: string }> = {
+    distress: { card: "bg-rose-50 border-rose-200", text: "text-rose-600", sub: "Distress Zone" },
+    grey: { card: "bg-amber-50 border-amber-200", text: "text-amber-600", sub: "Grey Zone" },
+    safe: { card: "bg-emerald-50 border-emerald-200", text: "text-emerald-600", sub: "Safe Zone" },
+  };
+  const trendData = years.map((y, i) => ({ year: shortYear(y), Z: +Z[i]?.toFixed(2) }));
+  const compData = years.map((y, i) => ({ year: shortYear(y), A: 1.2 * A[i], B: 1.4 * B[i], C: 3.3 * C[i], D: 0.6 * D[i], E: 1.0 * E[i] }));
+  const firstZone = altmanZone(Z[0]);
+  const lastZone = altmanZone(Z[Z.length - 1]);
+  const interp = `The Z-Score ${firstZone === lastZone ? `holds in the ${zoneCls[lastZone].sub} (${fmt2(Z[0])} → ${fmt2(Z[Z.length - 1])})` : `moves from ${fmt2(Z[0])} (${zoneCls[firstZone].sub}) to ${fmt2(Z[Z.length - 1])} (${zoneCls[lastZone].sub})`} across the projection${lastZone === "safe" ? ", indicating the business strengthens into a financially healthy position." : lastZone === "grey" ? ", indicating financial health that warrants monitoring." : ", signalling elevated bankruptcy risk that needs attention."}`;
+
+  return (
+    <SectionPage>
+      <PageHeader eyebrow="Solvency" title="Altman Z-Score Analysis" description={`Financial health prediction model — FY${shortYear(years[0])} to FY${shortYear(years[years.length - 1])}.${computed ? " Computed from balance sheet & P&L." : ""}`} />
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <div className="rounded-2xl border p-5 bg-rose-50 border-rose-200">
+          <div className="font-display text-[19px] text-rose-700">Distress Zone</div>
+          <div className="num-tabular text-[13px] text-rose-600 mt-1">Z &lt; 1.81</div>
+          <div className="text-[12px] text-muted-foreground mt-1">High risk of bankruptcy</div>
+        </div>
+        <div className="rounded-2xl border p-5 bg-amber-50 border-amber-200">
+          <div className="font-display text-[19px] text-amber-700">Grey Zone</div>
+          <div className="num-tabular text-[13px] text-amber-600 mt-1">1.81 ≤ Z &lt; 2.99</div>
+          <div className="text-[12px] text-muted-foreground mt-1">Uncertain — monitor closely</div>
+        </div>
+        <div className="rounded-2xl border p-5 bg-emerald-50 border-emerald-200">
+          <div className="font-display text-[19px] text-emerald-700">Safe Zone</div>
+          <div className="num-tabular text-[13px] text-emerald-600 mt-1">Z ≥ 2.99</div>
+          <div className="text-[12px] text-muted-foreground mt-1">Financially healthy</div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3 mb-8">
+        {years.map((y, i) => {
+          const zn = altmanZone(Z[i]);
+          const c = zoneCls[zn];
+          return (
+            <div key={i} className={`rounded-xl border px-3 py-3 text-center ${c.card}`}>
+              <div className="text-[10px] text-muted-foreground mb-1">{shortYear(y)}</div>
+              <div className={`font-display text-[22px] leading-none num-tabular ${c.text}`}>{fmt2(Z[i])}</div>
+              <div className={`text-[10px] mt-1 ${c.text}`}>{c.sub}</div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        <ChartFrame eyebrow="Trend" title="Altman Z-Score Trend" description="Formula: 1.2·A + 1.4·B + 3.3·C + 0.6·D + 1.0·E" chartHeight={300}>
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={trendData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+              <CartesianGrid vertical={false} stroke="hsl(220 16% 90%)" />
+              <XAxis dataKey="year" tick={axisTick} axisLine={false} tickLine={false} interval={0} angle={-20} textAnchor="end" height={50} />
+              <YAxis tick={axisTick} axisLine={false} tickLine={false} />
+              <RechartsTooltip contentStyle={tooltipStyle} formatter={(v: number) => `${(+v).toFixed(2)}`} />
+              <ReferenceLine y={2.99} stroke={EMERALD} strokeDasharray="4 4" />
+              <ReferenceLine y={1.81} stroke={ROSE} strokeDasharray="4 4" />
+              <Line type="monotone" dataKey="Z" stroke={NAVY} strokeWidth={2.5} dot={{ r: 3, fill: NAVY }} />
+            </LineChart>
+          </ResponsiveContainer>
+        </ChartFrame>
+
+        <ChartFrame eyebrow="Decomposition" title="Z-Score Components (Bar)" description="Weighted contribution of each component." chartHeight={300}>
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={compData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+              <CartesianGrid vertical={false} stroke="hsl(220 16% 90%)" />
+              <XAxis dataKey="year" tick={axisTick} axisLine={false} tickLine={false} interval={0} angle={-20} textAnchor="end" height={50} />
+              <YAxis tick={axisTick} axisLine={false} tickLine={false} />
+              <RechartsTooltip contentStyle={tooltipStyle} formatter={(v: number) => `${(+v).toFixed(2)}`} />
+              <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8 }} iconType="circle" />
+              <Bar dataKey="A" name="A (WC/TA)" stackId="z" fill={NAVY} maxBarSize={30} />
+              <Bar dataKey="B" name="B (Earnings/TA)" stackId="z" fill={EMERALD} maxBarSize={30} />
+              <Bar dataKey="C" name="C (EBIT/TA)" stackId="z" fill={GOLD} maxBarSize={30} />
+              <Bar dataKey="D" name="D (Equity/Liab)" stackId="z" fill={PURPLE} maxBarSize={30} />
+              <Bar dataKey="E" name="E (Sales/TA)" stackId="z" fill={NAVY_LIGHT} maxBarSize={30} />
+            </BarChart>
+          </ResponsiveContainer>
+        </ChartFrame>
+      </div>
+
+      <div className="surface-card rounded-2xl overflow-hidden">
+        <div className="px-5 py-4 bg-muted/40 border-b border-border">
+          <div className="text-[13px] font-semibold text-foreground">Formula (Private Firm): Z = 1.2·A + 1.4·B + 3.3·C + 0.6·D + 1.0·E</div>
+          <div className="text-[11.5px] text-muted-foreground mt-1">A = Working Capital / Total Assets · B = Earnings / Total Assets · C = EBIT / Total Assets · D = Equity / Total Liabilities · E = Sales / Total Assets</div>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-primary">
+                <th className="text-eyebrow text-white/85 py-3.5 px-4 text-left whitespace-nowrap">Component</th>
+                {years.map((y, i) => (<th key={i} className="text-eyebrow text-white/85 text-right px-4 whitespace-nowrap">{shortYear(y)}</th>))}
+              </tr>
+            </thead>
+            <tbody>
+              {([
+                ["A = WC / Total Assets", A],
+                ["B = Earnings / Total Assets", B],
+                ["C = EBIT / Total Assets", C],
+                ["D = Equity / Total Liabilities", D],
+                ["E = Sales / Total Assets", E],
+              ] as [string, number[]][]).map(([label, arr], ri) => (
+                <tr key={ri} className={`border-t border-border ${ri % 2 === 1 ? "bg-muted/30" : ""}`}>
+                  <td className="text-[13px] py-2.5 px-4 whitespace-nowrap">{label}</td>
+                  {years.map((_, ci) => (<td key={ci} className="text-right num-tabular text-[13px] px-4">{fmt2(arr[ci])}</td>))}
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr className="bg-primary text-white">
+                <td className="text-eyebrow text-white/90 py-3.5 px-4 whitespace-nowrap">Altman Z-Score</td>
+                {years.map((_, ci) => {
+                  const zn = altmanZone(Z[ci]);
+                  const col = zn === "safe" ? "text-emerald-300" : zn === "grey" ? "text-amber-300" : "text-rose-300";
+                  return (<td key={ci} className={`text-right num-tabular text-[13.5px] font-semibold px-4 ${col}`}>{fmt2(Z[ci])} {zn === "safe" ? "✓" : zn === "distress" ? "●" : "▲"}</td>);
+                })}
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+        <div className="px-5 py-4 bg-brand/[0.05] border-t border-border">
+          <span className="text-[12.5px] font-semibold text-brand">Interpretation: </span>
+          <span className="text-[12.5px] text-foreground/80 leading-relaxed">{interp}</span>
+        </div>
+      </div>
+    </SectionPage>
+  );
+}
+
+// ═══════════ BREAK-EVEN POINT & SENSITIVITY ═══════════
+function BreakEvenSection({ ed }: { ed: any }) {
+  const be = ed?.breakEvenAnalysis;
+  const pl = ed?.plAccount;
+  if (!be) {
+    return (
+      <SectionPage>
+        <PageHeader eyebrow="Risk Analysis" title="Break-Even Point & Sensitivity Analysis" />
+        <EmptyState />
+      </SectionPage>
+    );
+  }
+  const years: string[] = be.years || pl?.years || [];
+  const hasBep = Array.isArray(be.bepKg) && be.bepKg.some((x: number | null) => x != null);
+  const hasMos = Array.isArray(be.mosPercentage) && be.mosPercentage.some((x: number | null) => x != null);
+  const hasSens = Array.isArray(be.sensitivityPriceDown10) && be.sensitivityPriceDown10.some((x: number | null) => x != null);
+
+  if (!years.length || (!hasBep && !hasMos && !hasSens)) {
+    return (
+      <SectionPage>
+        <PageHeader eyebrow="Risk Analysis" title="Break-Even Point & Sensitivity Analysis" />
+        <EmptyState />
+      </SectionPage>
+    );
+  }
+
+  const lastIdx = years.length - 1;
+  const baseEbt: number[] = pl?.ebt || [];
+  const salesBepData = hasMos ? years.map((y, i) => ({ year: shortYear(y), "Actual Sales": (be.actualSales?.[i] || 0) / 1e5, "BEP Sales": (be.breakEvenSales?.[i] || 0) / 1e5, MOS: (be.mosValue?.[i] || 0) / 1e5 })) : [];
+  const mosTrend = hasMos ? years.map((y, i) => ({ year: shortYear(y), "MOS %": be.mosPercentage?.[i] ?? null })) : [];
+  const capData = hasBep ? years.map((y, i) => ({ year: shortYear(y), "Capacity %": be.operatingCapacityPct?.[i] ?? null })) : [];
+  const divL = (v: number | null | undefined): number | null => (v == null || !isFinite(v) ? null : v / 1e5);
+  const sensData = hasSens ? years.map((y, i) => ({ year: shortYear(y), "Base EBT": divL(baseEbt[i]), "Price ↓10%": divL(be.sensitivityPriceDown10?.[i]), "Cost ↑10%": divL(be.sensitivityExpenseUp10?.[i]) })) : [];
+
+  return (
+    <SectionPage>
+      <PageHeader eyebrow="Risk Analysis" title="Break-Even Point & Sensitivity Analysis" description="BEP · Margin of Safety · Sensitivity Analysis." />
+
+      {(hasBep || hasMos) && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          {hasBep && (
+            <div className="surface-card rounded-xl px-6 py-5 bg-amber-50/50">
+              <div className="font-display text-[24px] leading-[1.1] text-amber-600 num-tabular">{rupee(be.bepKg?.[0])} KGs</div>
+              <div className="text-eyebrow text-muted-foreground mt-2">BEP ({shortYear(years[0])})</div>
+              <div className="text-[11px] text-muted-foreground/70 mt-0.5">{be.operatingCapacityPct?.[0] != null ? `${fmt2(be.operatingCapacityPct[0])}% capacity` : ""}</div>
+            </div>
+          )}
+          {hasBep && years.length > 1 && (
+            <div className="surface-card rounded-xl px-6 py-5 bg-brand/[0.04]">
+              <div className="font-display text-[24px] leading-[1.1] text-brand num-tabular">{rupee(be.bepKg?.[1])} KGs</div>
+              <div className="text-eyebrow text-muted-foreground mt-2">BEP ({shortYear(years[1])})</div>
+              <div className="text-[11px] text-muted-foreground/70 mt-0.5">{be.operatingCapacityPct?.[1] != null ? `${fmt2(be.operatingCapacityPct[1])}% capacity` : ""}</div>
+            </div>
+          )}
+          {hasMos && (
+            <div className="surface-card rounded-xl px-6 py-5 bg-emerald-50/50">
+              <div className="font-display text-[24px] leading-[1.1] text-emerald-600 num-tabular">{fmtPct(be.mosPercentage?.[0])}</div>
+              <div className="text-eyebrow text-muted-foreground mt-2">MOS% ({shortYear(years[0])})</div>
+              <div className="text-[11px] text-muted-foreground/70 mt-0.5">{be.mosValue?.[0] != null ? `${toL(be.mosValue[0])} safety buffer` : ""}</div>
+            </div>
+          )}
+          {hasMos && (
+            <div className="surface-card rounded-xl px-6 py-5 bg-emerald-50/50">
+              <div className="font-display text-[24px] leading-[1.1] text-emerald-600 num-tabular">{fmtPct(be.mosPercentage?.[lastIdx])}</div>
+              <div className="text-eyebrow text-muted-foreground mt-2">MOS% ({shortYear(years[lastIdx])})</div>
+              <div className="text-[11px] text-muted-foreground/70 mt-0.5">Strong safety margin</div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {!hasBep && !hasMos && hasSens && (
+        <div className="mb-6 px-5 py-4 rounded-xl bg-amber-50/60 border border-amber-100 text-[12.5px] text-amber-900/80">
+          This DPR did not include the full Break-Even / Margin-of-Safety tables. The sensitivity analysis (EBT under price/cost stress) is shown below.
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        {hasMos && (
+          <ChartFrame eyebrow="Safety" title="Actual Sales vs BEP Sales (₹ Lacs)" description="The gap between actual and BEP sales = Margin of Safety." chartHeight={300}>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={salesBepData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+                <CartesianGrid vertical={false} stroke="hsl(220 16% 90%)" />
+                <XAxis dataKey="year" tick={axisTick} axisLine={false} tickLine={false} interval={0} angle={-20} textAnchor="end" height={50} />
+                <YAxis tick={axisTick} axisLine={false} tickLine={false} tickFormatter={fmtAxisL} />
+                <RechartsTooltip contentStyle={tooltipStyle} formatter={(v: number) => `₹${(+v).toFixed(2)}L`} />
+                <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8 }} iconType="circle" />
+                <Bar dataKey="Actual Sales" fill={NAVY} radius={[3, 3, 0, 0]} maxBarSize={20} />
+                <Bar dataKey="BEP Sales" fill={GOLD} radius={[3, 3, 0, 0]} maxBarSize={20} />
+                <Bar dataKey="MOS" fill={EMERALD} radius={[3, 3, 0, 0]} maxBarSize={20} />
+              </BarChart>
+            </ResponsiveContainer>
+          </ChartFrame>
+        )}
+        {hasMos && (
+          <ChartFrame eyebrow="Trend" title="Margin of Safety % Trend" description="Rising MOS % indicates increasing financial safety." chartHeight={300}>
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={mosTrend} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="mosGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor={EMERALD} stopOpacity={0.3} />
+                    <stop offset="100%" stopColor={EMERALD} stopOpacity={0.02} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid vertical={false} stroke="hsl(220 16% 90%)" />
+                <XAxis dataKey="year" tick={axisTick} axisLine={false} tickLine={false} interval={0} angle={-20} textAnchor="end" height={50} />
+                <YAxis tick={axisTick} axisLine={false} tickLine={false} tickFormatter={(v: number) => `${Math.round(v)}%`} />
+                <RechartsTooltip contentStyle={tooltipStyle} formatter={(v: number) => `${(+v).toFixed(2)}%`} />
+                <Area type="monotone" dataKey="MOS %" stroke={EMERALD} strokeWidth={2.5} fill="url(#mosGrad)" dot={{ r: 3, fill: EMERALD }} />
+              </AreaChart>
+            </ResponsiveContainer>
+          </ChartFrame>
+        )}
+        {hasBep && (
+          <ChartFrame eyebrow="Utilization" title="Capacity Utilization %" description={be.installedCapacityKg?.[0] != null ? `Installed capacity = ${rupee(be.installedCapacityKg[0])} KGs per annum.` : undefined} chartHeight={300}>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={capData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+                <CartesianGrid vertical={false} stroke="hsl(220 16% 90%)" />
+                <XAxis dataKey="year" tick={axisTick} axisLine={false} tickLine={false} interval={0} angle={-20} textAnchor="end" height={50} />
+                <YAxis tick={axisTick} axisLine={false} tickLine={false} domain={[0, 110]} tickFormatter={(v: number) => `${Math.round(v)}%`} />
+                <RechartsTooltip contentStyle={tooltipStyle} formatter={(v: number) => `${(+v).toFixed(2)}%`} />
+                <ReferenceLine y={100} stroke={ROSE} strokeDasharray="4 4" />
+                <Bar dataKey="Capacity %" fill={PURPLE} radius={[3, 3, 0, 0]} maxBarSize={30} />
+              </BarChart>
+            </ResponsiveContainer>
+          </ChartFrame>
+        )}
+        {hasSens && (
+          <ChartFrame eyebrow="Stress Test" title="Sensitivity Analysis — EBT (₹ Lacs)" description="Impact of price decrease 10% or cost increase 10%." chartHeight={300}>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={sensData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+                <CartesianGrid vertical={false} stroke="hsl(220 16% 90%)" />
+                <XAxis dataKey="year" tick={axisTick} axisLine={false} tickLine={false} interval={0} angle={-20} textAnchor="end" height={50} />
+                <YAxis tick={axisTick} axisLine={false} tickLine={false} tickFormatter={fmtAxisL} />
+                <RechartsTooltip contentStyle={tooltipStyle} formatter={(v: number) => `₹${(+v).toFixed(2)}L`} />
+                <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8 }} iconType="circle" />
+                <ReferenceLine y={0} stroke={SLATE} />
+                <Bar dataKey="Base EBT" fill={NAVY} radius={[3, 3, 0, 0]} maxBarSize={20} />
+                <Bar dataKey="Price ↓10%" fill={ROSE} radius={[3, 3, 0, 0]} maxBarSize={20} />
+                <Bar dataKey="Cost ↑10%" fill={GOLD} radius={[3, 3, 0, 0]} maxBarSize={20} />
+              </BarChart>
+            </ResponsiveContainer>
+          </ChartFrame>
+        )}
+      </div>
+
+      {hasBep && (
+        <div className="mb-6">
+          <div className="text-eyebrow text-gold mb-2">Break-Even Point — Detailed Calculation (₹)</div>
+          <MatrixTable
+            years={years}
+            rows={[
+              { label: "Gross Revenue (₹)", values: be.grossRevenue, bold: true, tone: "blue" },
+              { label: "Cost of Goods Sold (₹)", values: be.variableCost },
+              { label: "Contribution (₹)", values: be.contribution, bold: true },
+              { label: "Selling Price per KG (₹)", values: be.sellingPricePerKg, fmt: fmt2 },
+              { label: "Quantity (KGs)", values: be.quantityKg },
+              { label: "Contribution per KG (₹)", values: be.contributionPerKg, fmt: fmt2 },
+              { label: "Fixed Costs (₹)", values: be.fixedCost },
+              { label: "BEP in KGs", values: be.bepKg, bold: true, tone: "blue" },
+              { label: "Installed Capacity (KGs)", values: be.installedCapacityKg },
+              { label: "Operating Capacity %", values: be.operatingCapacityPct, fmt: fmtPct },
+            ]}
+          />
+        </div>
+      )}
+
+      {hasMos && (
+        <div className="mb-6">
+          <div className="text-eyebrow text-gold mb-2">Margin of Safety (₹)</div>
+          <MatrixTable
+            years={years}
+            rows={[
+              { label: "Actual Sales (₹)", values: be.actualSales, tone: "blue" },
+              { label: "BEP Sales (₹)", values: be.breakEvenSales },
+              { label: "MOS Value (₹)", values: be.mosValue, bold: true, tone: "emerald" },
+              { label: "MOS Ratio", values: be.mosRatio, fmt: fmt2 },
+              { label: "MOS Percentage (%)", values: be.mosPercentage, fmt: fmtPct, bold: true, tone: "emerald" },
+            ]}
+          />
+        </div>
+      )}
+
+      {hasSens && (
+        <div className="surface-card rounded-2xl overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-primary">
+                  <th className="text-eyebrow text-white/85 py-3.5 px-4 text-left whitespace-nowrap">Year</th>
+                  <th className="text-eyebrow text-white/85 text-right px-4 whitespace-nowrap">Base EBT (₹)</th>
+                  <th className="text-eyebrow text-white/85 text-right px-4 whitespace-nowrap">Selling Price ↓10% EBT (₹)</th>
+                  <th className="text-eyebrow text-white/85 text-right px-4 whitespace-nowrap">Direct Cost ↑10% EBT (₹)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {years.map((y, i) => {
+                  const p = be.sensitivityPriceDown10?.[i];
+                  const c = be.sensitivityExpenseUp10?.[i];
+                  return (
+                    <tr key={i} className={`border-t border-border ${i % 2 === 1 ? "bg-muted/30" : ""}`}>
+                      <td className="font-medium text-[13px] py-3 px-4 whitespace-nowrap">{shortYear(y)}</td>
+                      <td className="text-right num-tabular text-[13px] px-4 text-brand">{rupee(baseEbt[i])}</td>
+                      <td className={`text-right num-tabular text-[13px] px-4 ${p != null && p < 0 ? "text-rose-600" : "text-emerald-600"}`}>{rupee(p)}</td>
+                      <td className={`text-right num-tabular text-[13px] px-4 ${c != null && c < 0 ? "text-rose-600" : "text-amber-600"}`}>{rupee(c)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </SectionPage>
+  );
+}
+
+// ═══════════ MPBF (WORKING CAPITAL) ASSESSMENT ═══════════
+// Tandon Committee (Method 1) & Chore Committee (Method 2) maximum permissible
+// bank finance, computed entirely client-side from the balance sheet.
+function MpbfSection({ ed }: { ed: any }) {
+  const bs = ed?.balanceSheet;
+  const years: string[] = bs?.years || [];
+  const stock: number[] = bs?.closingStock || [];
+  const recv: number[] = bs?.receivables || [];
+  const curLiab: number[] = bs?.currentLiabilities || [];
+  const wcLoan: number[] = bs?.workingCapitalLoan || [];
+
+  if (!years.length || !stock.length || !curLiab.length) {
+    return (
+      <SectionPage>
+        <PageHeader eyebrow="Working Capital" title="Working Capital — MPBF Analysis" />
+        <EmptyState />
+      </SectionPage>
+    );
+  }
+
+  const totalCA = years.map((_, i) => (stock[i] || 0) + (recv[i] || 0));
+  const otherCL = years.map((_, i) => (curLiab[i] || 0) - (wcLoan[i] || 0));
+  const nwcGap = totalCA.map((ca, i) => ca - otherCL[i]);
+  const margin25 = totalCA.map((ca) => 0.25 * ca);
+  const m1 = nwcGap.map((g) => 0.75 * g);
+  const m2 = totalCA.map((ca, i) => 0.75 * ca - otherCL[i]);
+  const wcSanctioned = years.map((_, i) => wcLoan[i] || 0);
+  const wcSanctionDisplay = wcSanctioned.find((x) => x > 0) || wcSanctioned[0] || 0;
+
+  const cmpData = years.map((y, i) => ({ year: shortYear(y), "MPBF (M1)": m1[i] / 1e5, "MPBF (M2)": m2[i] / 1e5, "WC Limit": wcSanctioned[i] / 1e5 }));
+  const caData = years.map((y, i) => ({ year: shortYear(y), "Total CA": totalCA[i] / 1e5, "Current Liab (excl WC)": otherCL[i] / 1e5, NWC: nwcGap[i] / 1e5 }));
+
+  return (
+    <SectionPage>
+      <PageHeader eyebrow="Working Capital" title="Working Capital — MPBF Analysis" description={`Maximum Permissible Bank Finance — Methods 1 & 2 | WC Loan ${toL(wcSanctionDisplay)}.`} />
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <div className="surface-card rounded-xl px-6 py-5 bg-brand/[0.04]">
+          <div className="font-display text-[26px] leading-[1.1] text-brand num-tabular">{toL(wcSanctionDisplay)}</div>
+          <div className="text-eyebrow text-muted-foreground mt-2">WC Loan Sanctioned</div>
+          <div className="text-[11px] text-muted-foreground/70 mt-0.5">Cash-credit limit</div>
+        </div>
+        <div className="surface-card rounded-xl px-6 py-5 bg-emerald-50/50">
+          <div className="font-display text-[26px] leading-[1.1] text-emerald-600 num-tabular">{toL(m1[0])}</div>
+          <div className="text-eyebrow text-muted-foreground mt-2">MPBF M1 ({shortYear(years[0])})</div>
+          <div className="text-[11px] text-muted-foreground/70 mt-0.5">75% of (CA − CL)</div>
+        </div>
+        <div className="surface-card rounded-xl px-6 py-5 bg-violet-50/50">
+          <div className="font-display text-[26px] leading-[1.1] text-violet-600 num-tabular">{toL(m2[0])}</div>
+          <div className="text-eyebrow text-muted-foreground mt-2">MPBF M2 ({shortYear(years[0])})</div>
+          <div className="text-[11px] text-muted-foreground/70 mt-0.5">75% × CA − CL</div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+        <div className="rounded-2xl border border-brand/20 bg-brand/[0.04] p-5">
+          <div className="font-display text-[16px] text-foreground mb-1">Method 1 (M1) — Tandon Committee</div>
+          <div className="num-tabular text-[12.5px] text-brand mb-2">MPBF = 75% × (CA − CL)</div>
+          <ul className="text-[12.5px] text-foreground/75 space-y-1 list-disc pl-4">
+            <li>Borrower contributes 25% of (Current Assets − Current Liabilities)</li>
+            <li>Bank finances up to 75% of the net working-capital gap</li>
+            <li>Current margin: minimum 25% of NWC</li>
+          </ul>
+        </div>
+        <div className="rounded-2xl border border-violet-200 bg-violet-50/40 p-5">
+          <div className="font-display text-[16px] text-foreground mb-1">Method 2 (M2) — Chore Committee</div>
+          <div className="num-tabular text-[12.5px] text-violet-600 mb-2">MPBF = 75% × CA − CL</div>
+          <ul className="text-[12.5px] text-foreground/75 space-y-1 list-disc pl-4">
+            <li>Borrower contributes 25% of Total Current Assets</li>
+            <li>More stringent — borrower needs higher own contribution</li>
+            <li>Preferred by banks for better credit discipline</li>
+          </ul>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        <ChartFrame eyebrow="Comparison" title="MPBF Methods Comparison (₹ Lacs)" chartHeight={300}>
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={cmpData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+              <CartesianGrid vertical={false} stroke="hsl(220 16% 90%)" />
+              <XAxis dataKey="year" tick={axisTick} axisLine={false} tickLine={false} interval={0} angle={-20} textAnchor="end" height={50} />
+              <YAxis tick={axisTick} axisLine={false} tickLine={false} tickFormatter={fmtAxisL} />
+              <RechartsTooltip contentStyle={tooltipStyle} formatter={(v: number) => `₹${(+v).toFixed(2)}L`} />
+              <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8 }} iconType="circle" />
+              <Bar dataKey="MPBF (M1)" fill={NAVY} radius={[3, 3, 0, 0]} maxBarSize={20} />
+              <Bar dataKey="MPBF (M2)" fill={PURPLE} radius={[3, 3, 0, 0]} maxBarSize={20} />
+              <Bar dataKey="WC Limit" fill={EMERALD} radius={[3, 3, 0, 0]} maxBarSize={20} />
+            </BarChart>
+          </ResponsiveContainer>
+        </ChartFrame>
+        <ChartFrame eyebrow="Position" title="Current Assets vs Liabilities (₹ Lacs)" chartHeight={300}>
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={caData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+              <CartesianGrid vertical={false} stroke="hsl(220 16% 90%)" />
+              <XAxis dataKey="year" tick={axisTick} axisLine={false} tickLine={false} interval={0} angle={-20} textAnchor="end" height={50} />
+              <YAxis tick={axisTick} axisLine={false} tickLine={false} tickFormatter={fmtAxisL} />
+              <RechartsTooltip contentStyle={tooltipStyle} formatter={(v: number) => `₹${(+v).toFixed(2)}L`} />
+              <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8 }} iconType="circle" />
+              <Bar dataKey="Total CA" fill={NAVY} radius={[3, 3, 0, 0]} maxBarSize={20} />
+              <Bar dataKey="Current Liab (excl WC)" fill={ROSE} radius={[3, 3, 0, 0]} maxBarSize={20} />
+              <Bar dataKey="NWC" fill={EMERALD} radius={[3, 3, 0, 0]} maxBarSize={20} />
+            </BarChart>
+          </ResponsiveContainer>
+        </ChartFrame>
+      </div>
+
+      <div className="mb-3">
+        <div className="text-eyebrow text-gold mb-2">MPBF Working Capital Assessment (₹)</div>
+        <MatrixTable
+          years={years}
+          rows={[
+            { kind: "section", label: "Current Assets" },
+            { label: "Inventory / Stock", values: stock, indent: true },
+            { label: "Receivables / Debtors", values: recv, indent: true },
+            { label: "Total Current Assets (CA)", values: totalCA, bold: true, tone: "blue" },
+            { kind: "section", label: "Current Liabilities (excl. WC Loan)" },
+            { label: "Sundry Creditors & Others", values: otherCL, indent: true },
+            { kind: "section", label: "Working Capital Gap & MPBF" },
+            { label: "Net Working Capital (NWC = CA − CL)", values: nwcGap, bold: true },
+            { label: "25% of CA (Margin Required)", values: margin25 },
+            { label: "MPBF — Method 1 = 75% × NWC", values: m1, bold: true, tone: "blue" },
+            { label: "MPBF — Method 2 = 75%×CA − CL", values: m2, bold: true, tone: "rose" },
+            { label: `WC Limit Sanctioned (${toL(wcSanctionDisplay)})`, values: wcSanctioned, bold: true, tone: "emerald" },
+          ]}
+        />
+      </div>
+
+      <div className="px-5 py-4 rounded-xl bg-amber-50/60 border border-amber-100">
+        <span className="text-[12.5px] font-semibold text-amber-900">Note: </span>
+        <span className="text-[12.5px] text-amber-900/80 leading-relaxed">The WC loan sanctioned ({toL(wcSanctionDisplay)}) is the lower of MPBF Method 1 and Method 2. As the business grows, the working-capital requirement rises while the bank limit stays fixed, requiring greater internal accruals. Inventory is shown as a single line where the raw-material / WIP / finished-goods split is not itemised in the DPR.</span>
       </div>
     </SectionPage>
   );

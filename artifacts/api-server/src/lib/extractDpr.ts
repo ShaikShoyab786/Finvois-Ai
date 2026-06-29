@@ -53,6 +53,8 @@ CRITICAL RULES:
    - financialEvaluation.npvAnalysis (the "Present Value of Future Cash Flows & Net Present Value (NPV)" block, figures in rupees): pvFutureCashFlows (PRESENT VALUE OF FUTURE CASH FLOWS), initialInvestment (CASH OUTFLOWS), netPresentValue (NET PRESENT VALUE).
    - financialEvaluation.simplePaybackSchedule (the "Investment Payback Period (Simple Method)" table, rupees): one object per row IN ORDER. The first row is the initial outflow — set year to "Initial" with a negative cashFlow and cumulative. Each subsequent row: year (the period label exactly as printed, e.g. "2025-26 Sep to Mar", "2026-27"), cashFlow (Amount Rs for that year), cumulative (Cumulative Cash flows Rs, negative until recovered).
    - financialEvaluation.dcfPaybackSchedule (the "Investment Payback Period (Discounted Cashflows Method)" table, rupees): one object per row IN ORDER. First row is the initial outflow with year "Initial". Each subsequent row: year (period label), cashFlow (undiscounted Amount Rs), discountedCashFlow (Discounted Cash Flows Rs), cumulativeDiscounted (Cumulative Discounted Cash flows Rs).
+15. For altmanZScore (the "CALCULATION OF ALTMAN Z SCORE" table). OVERRIDE rule #3: every value must be a plain JSON NUMBER. Capture per projected year, every array the same length as "years": the supporting figures netWorkingCapital (Net Working capital), totalAssets (Total Assets), earningBeforeTax (Earning before Tax), ebit (EBIT), netEquity (Net Equity / Net Capital), totalLiabilities (Total Liabilities), sales (Sales); and the five ratio rows EXACTLY as printed — workingCapitalToTotalAssets (row "A. Working capital / Total Assets"), earningsToTotalAssets (row "B. Earning / Total Assets"), ebitToTotalAssets (row "C. EBIT / Total Assets"), equityToTotalLiabilities (row "D. Equity Capital / Total Liabilities"), salesToTotalAssets (row "E. Sales / Total Assets"); and zScore (row "Altman Z Score Formulae"). The rows are printed as run-together digit strings; split each into EXACTLY as many numbers as there are years, preserving the printed decimal places. Set the whole structure to null if the Altman table is absent.
+16. For breakEvenAnalysis (the "CALCULATION OF BREAK EVEN POINT (BEP)", "CALCULATION OF MARGIN OF SAFETY (MOS)" and "SENSITIVITY ANALYSIS" tables). OVERRIDE rule #3: every value must be a plain JSON NUMBER (no commas/symbols), and parenthesised figures like "(106,282)" are NEGATIVE numbers. Capture per projected year, every array the same length as "years": grossRevenue (Gross Revenue), variableCost (Cost of Goods Sold / Direct Costs), contribution (Contribution), sellingPricePerKg (Selling price per KG/unit), quantityKg (Quantity Manufactured in KGs/units), contributionPerKg (Contribution per KG), fixedCost (Fixed Costs), bepKg (Break Even Point in KGs), installedCapacityKg (Plant Installed capacity in KGs), operatingCapacityPct (Operating capacity %), actualSales (Actual Sales), breakEvenSales (Break even Sales), mosValue (MOS Value), mosRatio (MOS Ratio), mosPercentage (MOS Percentage), sensitivityPriceDown10 (Sensitivity EBT — "If Selling Price decrease by 10%"), sensitivityExpenseUp10 (Sensitivity EBT — "If Direct Expenses increase by 10%"). The rows are printed as run-together digit strings; split each into EXACTLY as many numbers as there are years. Set any row absent from the document to null; set the whole structure to null if none of these tables are present.
 
 Extract the following structure:
 {
@@ -237,7 +239,43 @@ Extract the following structure:
   ],
   "productPortfolio": [
     { "product": string, "productionCapacity": string|null }
-  ]
+  ],
+  "altmanZScore": {
+    "years": string[]|null,
+    "netWorkingCapital": number[]|null,
+    "totalAssets": number[]|null,
+    "earningBeforeTax": number[]|null,
+    "ebit": number[]|null,
+    "netEquity": number[]|null,
+    "totalLiabilities": number[]|null,
+    "sales": number[]|null,
+    "workingCapitalToTotalAssets": number[]|null,
+    "earningsToTotalAssets": number[]|null,
+    "ebitToTotalAssets": number[]|null,
+    "equityToTotalLiabilities": number[]|null,
+    "salesToTotalAssets": number[]|null,
+    "zScore": number[]|null
+  },
+  "breakEvenAnalysis": {
+    "years": string[]|null,
+    "grossRevenue": number[]|null,
+    "variableCost": number[]|null,
+    "contribution": number[]|null,
+    "sellingPricePerKg": number[]|null,
+    "quantityKg": number[]|null,
+    "contributionPerKg": number[]|null,
+    "fixedCost": number[]|null,
+    "bepKg": number[]|null,
+    "installedCapacityKg": number[]|null,
+    "operatingCapacityPct": number[]|null,
+    "actualSales": number[]|null,
+    "breakEvenSales": number[]|null,
+    "mosValue": number[]|null,
+    "mosRatio": number[]|null,
+    "mosPercentage": number[]|null,
+    "sensitivityPriceDown10": number[]|null,
+    "sensitivityExpenseUp10": number[]|null
+  }
 }`;
 
 function extractJsonFromText(text: string): string {
@@ -307,6 +345,91 @@ export async function extractDprData(rawText: string): Promise<Record<string, un
     logger.error({ err, snippet: jsonText.slice(0, 500) }, "Failed to parse AI JSON response");
     throw new Error(`AI returned invalid JSON: ${(err as Error).message}`);
   }
+}
+
+const SUPPLEMENTAL_PROMPT = `You are a financial analyst extracting two specific tables from the raw text of an Indian MSME DPR (Detailed Project Report).
+
+Return ONLY valid JSON (no markdown, no commentary) with EXACTLY this shape:
+{
+  "altmanZScore": {
+    "years": string[]|null,
+    "netWorkingCapital": number[]|null,
+    "totalAssets": number[]|null,
+    "earningBeforeTax": number[]|null,
+    "ebit": number[]|null,
+    "netEquity": number[]|null,
+    "totalLiabilities": number[]|null,
+    "sales": number[]|null,
+    "workingCapitalToTotalAssets": number[]|null,
+    "earningsToTotalAssets": number[]|null,
+    "ebitToTotalAssets": number[]|null,
+    "equityToTotalLiabilities": number[]|null,
+    "salesToTotalAssets": number[]|null,
+    "zScore": number[]|null
+  },
+  "breakEvenAnalysis": {
+    "years": string[]|null,
+    "grossRevenue": number[]|null,
+    "variableCost": number[]|null,
+    "contribution": number[]|null,
+    "sellingPricePerKg": number[]|null,
+    "quantityKg": number[]|null,
+    "contributionPerKg": number[]|null,
+    "fixedCost": number[]|null,
+    "bepKg": number[]|null,
+    "installedCapacityKg": number[]|null,
+    "operatingCapacityPct": number[]|null,
+    "actualSales": number[]|null,
+    "breakEvenSales": number[]|null,
+    "mosValue": number[]|null,
+    "mosRatio": number[]|null,
+    "mosPercentage": number[]|null,
+    "sensitivityPriceDown10": number[]|null,
+    "sensitivityExpenseUp10": number[]|null
+  }
+}
+
+RULES:
+1. Every numeric value must be a plain JSON NUMBER (no commas, no currency symbols, no "%"). Parenthesised figures like "(106,282)" are NEGATIVE numbers.
+2. altmanZScore comes from the "CALCULATION OF ALTMAN Z SCORE" table. The five ratio rows are labelled "A. Working capital / Total Assets" → workingCapitalToTotalAssets, "B. Earning / Total Assets" → earningsToTotalAssets, "C. EBIT / Total Assets" → ebitToTotalAssets, "D. Equity Capital / Total Liabilities" → equityToTotalLiabilities, "E. Sales / Total Assets" → salesToTotalAssets, and "Altman Z Score Formulae" → zScore. Also capture the supporting figure rows (Net Working capital, Total Assets, Earning before Tax, EBIT, Net Equity / Net Capital, Total Liabilities, Sales).
+3. breakEvenAnalysis comes from the "CALCULATION OF BREAK EVEN POINT (BEP)", "CALCULATION OF MARGIN OF SAFETY (MOS)" and "SENSITIVITY ANALYSIS - EARNINGS BEFORE TAX" tables. sensitivityPriceDown10 is the EBT column "If Selling Price decrease by 10%"; sensitivityExpenseUp10 is "If Direct Expenses increase by 10%".
+4. The values are printed as run-together digit strings (column separators were lost). First determine the number of projected years from the "years" header, then split EACH row into EXACTLY that many numbers, preserving the printed number of decimal places. Years usually look like "2025-26 Sep to Mar", "2026-27", … "2032-33".
+5. Set any individual row that is absent to null. Set altmanZScore (or breakEvenAnalysis) as a whole to null if that entire table is missing from the text.`;
+
+/**
+ * Focused, low-cost extraction of ONLY the Altman Z-Score and Break-Even /
+ * Sensitivity tables. Used to backfill these fields onto reports extracted
+ * before the schema was extended, WITHOUT re-running (and overwriting) the full
+ * extraction. Returns an object containing at most { altmanZScore, breakEvenAnalysis }.
+ */
+export async function extractSupplementalDpr(rawText: string): Promise<Record<string, unknown>> {
+  logger.info({ textLength: rawText.length }, "Starting supplemental DPR extraction (Altman + BEP)");
+
+  const truncatedText = rawText.slice(0, 60000);
+
+  const response = await client.messages.create(
+    {
+      model: "claude-sonnet-4-6",
+      max_tokens: 4000,
+      messages: [
+        {
+          role: "user",
+          content: `${SUPPLEMENTAL_PROMPT}\n\nDPR TEXT:\n${truncatedText}`,
+        },
+      ],
+    },
+    { timeout: 600000 },
+  );
+
+  const content = response.content[0];
+  if (content.type !== "text") {
+    throw new Error("Unexpected response type from AI");
+  }
+
+  const jsonText = extractJsonFromText(content.text);
+  const parsed = parseLlmJson(jsonText) as Record<string, unknown>;
+  logger.info("Supplemental DPR extraction completed successfully");
+  return parsed;
 }
 
 export async function generateExecutiveSummary(extractedData: Record<string, unknown>): Promise<{

@@ -4,7 +4,7 @@ import multer from "multer";
 import pdfParse from "pdf-parse/lib/pdf-parse.js";
 import { db, reportsTable } from "@workspace/db";
 import { eq, desc } from "drizzle-orm";
-import { extractDprData, generateExecutiveSummary, generateSectionVerdicts } from "../lib/extractDpr";
+import { extractDprData, extractSupplementalDpr, generateExecutiveSummary, generateSectionVerdicts } from "../lib/extractDpr";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
@@ -158,6 +158,51 @@ router.post("/reports/:id/retry", async (req, res): Promise<void> => {
         .where(eq(reportsTable.id, id));
     }
   });
+});
+
+// One-off backfill: extract ONLY the Altman Z-Score + Break-Even/Sensitivity
+// tables and MERGE them into the existing extractedData without touching any
+// other previously-extracted fields.
+router.post("/reports/:id/supplemental", async (req, res): Promise<void> => {
+  const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const id = parseInt(raw, 10);
+  if (isNaN(id)) {
+    res.status(400).json({ error: "Invalid report ID" });
+    return;
+  }
+
+  const [report] = await db.select().from(reportsTable).where(eq(reportsTable.id, id));
+  if (!report) {
+    res.status(404).json({ error: "Report not found" });
+    return;
+  }
+  if (!report.rawText) {
+    res.status(400).json({ error: "No raw text stored for this report; please re-upload." });
+    return;
+  }
+
+  try {
+    const supplemental = await extractSupplementalDpr(report.rawText);
+    const merged = {
+      ...((report.extractedData as Record<string, unknown>) ?? {}),
+      altmanZScore: supplemental.altmanZScore ?? null,
+      breakEvenAnalysis: supplemental.breakEvenAnalysis ?? null,
+    };
+    await db
+      .update(reportsTable)
+      .set({ extractedData: merged })
+      .where(eq(reportsTable.id, id));
+    logger.info({ id }, "Supplemental extraction merged");
+    res.json({
+      id,
+      altmanZScore: supplemental.altmanZScore ?? null,
+      breakEvenAnalysis: supplemental.breakEvenAnalysis ?? null,
+    });
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    req.log.error({ err, id }, "Supplemental extraction failed");
+    res.status(500).json({ error: errMsg });
+  }
 });
 
 router.get("/reports/:id", async (req, res): Promise<void> => {
