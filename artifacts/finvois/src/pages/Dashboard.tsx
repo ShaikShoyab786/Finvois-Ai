@@ -3,7 +3,7 @@ import { useLocation, useParams } from "wouter";
 import { useGetReport, useGetReportSummary, useGetReportVerdicts } from "@workspace/api-client-react";
 import type { UseQueryOptions } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { Loader2, FileText, User, MapPin, Phone, IdCard, Zap, CalendarDays, Briefcase, GraduationCap, Coins, Landmark, TrendingUp, CheckCircle2, Clock, Target, BarChart3, Activity } from "lucide-react";
+import { Loader2, FileText, User, MapPin, Phone, IdCard, Zap, CalendarDays, Briefcase, GraduationCap, Coins, Landmark, TrendingUp, TrendingDown, CheckCircle2, Clock, Target, BarChart3, Activity, Scale, Shield } from "lucide-react";
 import {
   ResponsiveContainer,
   BarChart,
@@ -21,6 +21,7 @@ import {
   PieChart,
   Pie,
   Cell,
+  ReferenceLine,
 } from "recharts";
 import { motion } from "framer-motion";
 
@@ -1097,84 +1098,277 @@ function RatiosSection({ ed, verdict, isLoadingVerdict }: { ed: any; verdict?: s
     </SectionPage>
   );
 
-  const insight = insightRatios(ra);
+  const years: string[] = ra.years;
+  const at = (a: any, i: number): number | null => {
+    const v = a?.[i];
+    return typeof v === "number" && isFinite(v) ? v : null;
+  };
+  const has = (a: any): boolean => Array.isArray(a) && a.some((v: any) => typeof v === "number" && isFinite(v));
+  const shortFy = (y: string) => {
+    const m = y.match(/-(\d{2,4})$/);
+    return m ? `FY${m[1].slice(-2)}` : y;
+  };
+  const fy = (y: string) => `FY${y}`;
+  const fpi = years.length > 1 ? 1 : 0; // first full projected year (year 0 may be partial)
+  const lpi = years.length - 1;
+  const fyRange = years.length === 1 ? fy(years[0]) : `${fy(years[0])} to ${fy(years[lpi])}`;
 
-  const ratios = [
-    { key: "dscr", label: "DSCR", values: ra.dscr || [], benchmark: 1.5, benchmarkLabel: "≥ 1.5× (banking standard)", color: GOLD },
-    { key: "currentRatio", label: "Current Ratio", values: ra.currentRatio || [], benchmark: 1.33, benchmarkLabel: "≥ 1.33 (healthy liquidity)", color: NAVY },
-    { key: "debtEquityRatio", label: "Debt / Equity", values: ra.debtEquityRatio || [], benchmark: 2, benchmarkLabel: "≤ 2 (manageable leverage)", color: NAVY_LIGHT, lower: true },
-    { key: "grossProfitMargin", label: "Gross Margin", values: ra.grossProfitMargin || [], benchmark: 20, benchmarkLabel: "≥ 20% (industry baseline)", color: EMERALD, isPct: true },
-    { key: "netProfitMargin", label: "Net Margin", values: ra.netProfitMargin || [], benchmark: 8, benchmarkLabel: "≥ 8% (sustainable margin)", color: GOLD, isPct: true },
-    { key: "returnOnEquity", label: "Return on Equity", values: ra.returnOnEquity || [], benchmark: 15, benchmarkLabel: "≥ 15% (investor expectation)", color: NAVY, isPct: true },
-  ].filter((r) => r.values.some((v: number | null) => v != null && v !== 0));
+  // Prefer explicitly extracted lines; TOL/TW falls back to debt-equity only when absent.
+  const tolTw = has(ra.tolTw) ? ra.tolTw : ra.debtEquityRatio;
+
+  // Percent-typed ratios may arrive either as percentages (e.g. 39.53) or as
+  // decimal fractions (e.g. 0.16 for 16%), depending on how each DPR prints
+  // them. A series whose every finite value sits within [-1, 1] is treated as
+  // fractions and scaled to whole-percent for display only — stored data is
+  // untouched. proprietaryRatio is intentionally excluded (a genuine ratio).
+  const pctScale = (arr: any): number => {
+    let any = false;
+    for (const v of arr || []) {
+      if (typeof v === "number" && isFinite(v)) {
+        any = true;
+        if (Math.abs(v) > 1) return 1; // any value beyond 1 means the series is already in whole-percent form
+      }
+    }
+    return any ? 100 : 1; // every finite value within [-1, 1] → fractions, scale to whole-percent
+  };
+  const scaleArr = (arr: any): (number | null)[] => {
+    const f = pctScale(arr);
+    return (arr || []).map((v: any) => (typeof v === "number" && isFinite(v) ? v * f : null));
+  };
+  const gp = scaleArr(ra.grossProfitMargin);
+  const np = scaleArr(ra.netProfitMargin);
+  const roce = scaleArr(ra.roce);
+  const roa = scaleArr(ra.returnOnAssets);
+
+  // ── Headline metric cards (render each only when its data exists) ──
+  const fmtX = (n: number) => `${n.toFixed(2)}x`;
+  const fmtPctV = (n: number) => `${n.toFixed(2)}%`;
+  const cards: { icon: any; value: string; label: string; sub: string; iconBg: string; iconColor: string }[] = [];
+  const pushCard = (icon: any, val: number | null, fmt: (n: number) => string, label: string, sub: string, iconBg: string, iconColor: string) => {
+    if (val != null) cards.push({ icon, value: fmt(val), label, sub, iconBg, iconColor });
+  };
+  pushCard(Target, at(ra.dscr, fpi), fmtX, `DSCR (${shortFy(years[fpi])})`, "Ideal: 1.75–3.0x", "bg-rose-50", "text-rose-500");
+  pushCard(Scale, at(ra.currentRatio, fpi), fmtX, `Current Ratio (${shortFy(years[fpi])})`, "Ideal: >1.33x", "bg-amber-50", "text-amber-500");
+  pushCard(TrendingUp, at(gp, 0), fmtPctV, `GP Ratio (${shortFy(years[0])})`, "Healthy gross margin", "bg-blue-50", "text-blue-500");
+  pushCard(Activity, at(np, lpi), fmtPctV, `NP Ratio (${shortFy(years[lpi])})`, "Strong profitability", "bg-emerald-50", "text-emerald-500");
+  pushCard(Shield, at(ra.interestCoverageRatio, fpi), fmtX, `ICR (${shortFy(years[fpi])})`, "Comfortably covers interest", "bg-sky-50", "text-sky-500");
+  pushCard(TrendingDown, at(tolTw, fpi), (n) => n.toFixed(2), `TOL/TW (${shortFy(years[fpi])})`, "Declining → strength", "bg-pink-50", "text-pink-500");
+
+  // ── Trend chart datasets ──
+  const dscrData = years.map((y, i) => ({ year: y, DSCR: at(ra.dscr, i) }));
+  const crData = years.map((y, i) => ({ year: y, "Current Ratio": at(ra.currentRatio, i) }));
+  const marginData = years.map((y, i) => ({ year: y, "GP%": at(gp, i), "NP%": at(np, i) }));
+  const icrData = years.map((y, i) => ({ year: y, ICR: at(ra.interestCoverageRatio, i) }));
+  const tolData = years.map((y, i) => ({ year: y, "TOL/TW": at(tolTw, i) }));
+  const returnData = years.map((y, i) => ({ year: y, ROCE: at(roce, i), ROA: at(roa, i) }));
+
+  const hasDscr = has(ra.dscr);
+  const hasCr = has(ra.currentRatio);
+  const hasMargins = has(gp) || has(np);
+  const hasIcr = has(ra.interestCoverageRatio);
+  const hasTol = has(tolTw);
+  const hasReturns = has(roce) || has(roa);
+  const anyChart = hasDscr || hasCr || hasMargins || hasIcr || hasTol || hasReturns;
+
+  // ── Comprehensive ratio summary rows (only what exists) ──
+  const fmtNum2 = (n: number) => n.toFixed(2);
+  const fmtPct2 = (n: number) => `${n.toFixed(2)}%`;
+  const fmtDays = (n: number) => `${Math.round(n)} days`;
+  const summaryDefs = [
+    { label: "DSCR (A/B)", values: ra.dscr, ideal: "1.75–3.0x", fmt: fmtNum2 },
+    { label: "Current Ratio", values: ra.currentRatio, ideal: ">1.33x", fmt: fmtNum2 },
+    { label: "Gross Profit Ratio (%)", values: gp, ideal: ">30%", fmt: fmtPct2 },
+    { label: "Net Profit Ratio (%)", values: np, ideal: ">10%", fmt: fmtPct2 },
+    { label: "Debtors Turnover Ratio", values: ra.debtorsTurnover, ideal: "Higher better", fmt: fmtNum2 },
+    { label: "Debtors Collection Days", values: ra.debtorsCollectionDays, ideal: "<60 days", fmt: fmtDays },
+    { label: "TOL/TW", values: tolTw, ideal: "<3.0x", fmt: fmtNum2 },
+    { label: "ROCE (PAT/Cap+LTL)", values: roce, ideal: ">10%", fmt: fmtPct2 },
+    { label: "Interest Coverage Ratio", values: ra.interestCoverageRatio, ideal: ">1.5x", fmt: fmtNum2 },
+    { label: "Return on Assets", values: roa, ideal: ">5%", fmt: fmtPct2 },
+    { label: "Proprietary Ratio", values: ra.proprietaryRatio, ideal: "Growing", fmt: fmtNum2 },
+  ].filter((r) => has(r.values));
+
+  const insight = insightRatios(ra);
 
   return (
     <SectionPage>
-      <PageHeader eyebrow="Quality" title="Ratio Analysis" description="Key financial health indicators projected across the loan window." />
+      <PageHeader eyebrow="Financials" title="Ratio Analysis" description={`Key financial ratios — ${fyRange}`} />
       <SectionVerdict verdict={verdict} isLoading={isLoadingVerdict} />
 
-      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5 mb-6">
-        {ratios.map(({ key, ...r }) => (
-          <RatioMiniCard key={key} {...r} years={ra.years} />
-        ))}
-      </div>
+      {cards.length > 0 && (
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
+          {cards.map((c, i) => (
+            <RatioStatCard key={i} {...c} />
+          ))}
+        </div>
+      )}
 
-      <InsightCaption text={insight} label="Banker's Read" />
+      {anyChart && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-6">
+          {hasDscr && (
+            <DashCard title="DSCR Trend" subtitle="Debt Service Coverage Ratio (Ideal: 1.75–3.0×)">
+              <div className="h-[260px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={dscrData} margin={{ top: 8, right: 16, bottom: 0, left: -12 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(220 16% 92%)" vertical={false} />
+                    <XAxis dataKey="year" tick={axisTick} axisLine={false} tickLine={false} />
+                    <YAxis tick={axisTick} axisLine={false} tickLine={false} width={36} />
+                    <RechartsTooltip contentStyle={tooltipStyle} formatter={(v: any) => `${Number(v).toFixed(2)}×`} />
+                    <ReferenceLine y={3.0} stroke={NAVY_LIGHT} strokeDasharray="5 4" label={{ value: "Max 3.0", position: "insideTopLeft", fill: NAVY_LIGHT, fontSize: 10 }} />
+                    <ReferenceLine y={1.75} stroke={GOLD} strokeDasharray="5 4" label={{ value: "Min 1.75", position: "insideBottomLeft", fill: GOLD, fontSize: 10 }} />
+                    <Line type="monotone" dataKey="DSCR" stroke={NAVY} strokeWidth={2.5} dot={{ r: 3, fill: NAVY }} connectNulls />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </DashCard>
+          )}
+
+          {hasCr && (
+            <DashCard title="Current Ratio Trend" subtitle="Liquidity — Ideal > 1.33× (RBI norm)">
+              <div className="h-[260px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={crData} margin={{ top: 8, right: 16, bottom: 0, left: -12 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(220 16% 92%)" vertical={false} />
+                    <XAxis dataKey="year" tick={axisTick} axisLine={false} tickLine={false} />
+                    <YAxis tick={axisTick} axisLine={false} tickLine={false} width={36} />
+                    <RechartsTooltip contentStyle={tooltipStyle} formatter={(v: any) => `${Number(v).toFixed(2)}×`} />
+                    <ReferenceLine y={1.33} stroke={GOLD} strokeDasharray="5 4" label={{ value: "Min 1.33", position: "insideBottomLeft", fill: GOLD, fontSize: 10 }} />
+                    <Line type="monotone" dataKey="Current Ratio" stroke={EMERALD} strokeWidth={2.5} dot={{ r: 3, fill: EMERALD }} connectNulls />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </DashCard>
+          )}
+
+          {hasMargins && (
+            <DashCard title="GP% & NP% Margins" subtitle="Overall profitability indicators (%)">
+              <div className="h-[260px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={marginData} margin={{ top: 8, right: 16, bottom: 0, left: 4 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(220 16% 92%)" vertical={false} />
+                    <XAxis dataKey="year" tick={axisTick} axisLine={false} tickLine={false} />
+                    <YAxis tick={axisTick} axisLine={false} tickLine={false} width={44} tickFormatter={(v: any) => `${v}%`} />
+                    <RechartsTooltip contentStyle={tooltipStyle} formatter={(v: any) => `${Number(v).toFixed(2)}%`} />
+                    <Legend wrapperStyle={{ fontSize: 12 }} iconType="plainline" />
+                    <Line type="monotone" dataKey="GP%" stroke={NAVY} strokeWidth={2.5} dot={{ r: 3, fill: "white", stroke: NAVY, strokeWidth: 2 }} connectNulls />
+                    <Line type="monotone" dataKey="NP%" stroke={EMERALD} strokeWidth={2.5} dot={{ r: 3, fill: EMERALD }} connectNulls />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </DashCard>
+          )}
+
+          {hasIcr && (
+            <DashCard title="Interest Coverage Ratio (ICR)" subtitle="EBIT / Interest — higher is better">
+              <div className="h-[260px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={icrData} margin={{ top: 8, right: 16, bottom: 0, left: -12 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(220 16% 92%)" vertical={false} />
+                    <XAxis dataKey="year" tick={axisTick} axisLine={false} tickLine={false} />
+                    <YAxis tick={axisTick} axisLine={false} tickLine={false} width={36} />
+                    <RechartsTooltip contentStyle={tooltipStyle} cursor={{ fill: "hsl(262 83% 58% / 0.06)" }} formatter={(v: any) => `${Number(v).toFixed(2)}×`} />
+                    <Bar dataKey="ICR" fill={PURPLE} radius={[4, 4, 0, 0]} maxBarSize={42} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </DashCard>
+          )}
+
+          {hasTol && (
+            <DashCard title="TOL/TW — Debt to Equity" subtitle="Total Outside Liabilities / Total Networth">
+              <div className="h-[260px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={tolData} margin={{ top: 8, right: 16, bottom: 0, left: -12 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(220 16% 92%)" vertical={false} />
+                    <XAxis dataKey="year" tick={axisTick} axisLine={false} tickLine={false} />
+                    <YAxis tick={axisTick} axisLine={false} tickLine={false} width={36} />
+                    <RechartsTooltip contentStyle={tooltipStyle} cursor={{ fill: "hsl(32 90% 52% / 0.06)" }} formatter={(v: any) => Number(v).toFixed(2)} />
+                    <Bar dataKey="TOL/TW" fill={GOLD} radius={[4, 4, 0, 0]} maxBarSize={42} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </DashCard>
+          )}
+
+          {hasReturns && (
+            <DashCard title="ROCE & ROA (%)" subtitle="Return on Capital Employed & Return on Assets">
+              <div className="h-[260px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={returnData} margin={{ top: 8, right: 16, bottom: 0, left: 4 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(220 16% 92%)" vertical={false} />
+                    <XAxis dataKey="year" tick={axisTick} axisLine={false} tickLine={false} />
+                    <YAxis tick={axisTick} axisLine={false} tickLine={false} width={44} tickFormatter={(v: any) => `${v}%`} />
+                    <RechartsTooltip contentStyle={tooltipStyle} formatter={(v: any) => `${Number(v).toFixed(2)}%`} />
+                    <Legend wrapperStyle={{ fontSize: 12 }} iconType="plainline" />
+                    <Line type="monotone" dataKey="ROCE" stroke={NAVY} strokeWidth={2.5} dot={{ r: 3, fill: NAVY }} connectNulls />
+                    <Line type="monotone" dataKey="ROA" stroke={EMERALD} strokeWidth={2.5} dot={{ r: 3, fill: EMERALD }} connectNulls />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </DashCard>
+          )}
+        </div>
+      )}
+
+      {summaryDefs.length > 0 && (
+        <div className="mb-3">
+          <h3 className="font-display text-[18px] mb-3">Comprehensive Ratio Summary</h3>
+          <RatioSummaryTable years={years} rows={summaryDefs} />
+          {insight && <p className="text-[12px] text-muted-foreground mt-2">{insight}</p>}
+        </div>
+      )}
     </SectionPage>
   );
 }
 
-function RatioMiniCard({ label, values, years, color, benchmark, benchmarkLabel, isPct, lower }: any) {
-  const data = years.map((y: string, i: number) => ({ year: y, v: values[i] != null ? values[i] : 0 }));
-  // Latest is the last non-null value; falls back to undefined when none
-  let latest: number | null = null;
-  for (let i = values.length - 1; i >= 0; i--) {
-    if (typeof values[i] === "number" && isFinite(values[i])) {
-      latest = values[i];
-      break;
-    }
-  }
-  const avg = meanFinite(values);
-  const passes = benchmark != null && avg != null
-    ? (lower ? avg <= benchmark : avg >= benchmark)
-    : null;
-
-  const fmt = (n: number) => isPct ? `${n.toFixed(1)}%` : n.toFixed(2);
-
+function RatioStatCard({ icon: Icon, value, label, sub, iconBg, iconColor }: { icon: any; value: string; label: string; sub: string; iconBg: string; iconColor: string }) {
   return (
-    <div className="surface-card rounded-2xl p-5">
-      <div className="flex items-start justify-between mb-2">
-        <div className="text-eyebrow text-muted-foreground">{label}</div>
-        {passes != null && (
-          <div className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${passes ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
-            {passes ? "On target" : "Below"}
-          </div>
-        )}
+    <div className="surface-card rounded-2xl p-5 text-center">
+      <div className={`w-10 h-10 rounded-full flex items-center justify-center mx-auto mb-3 ${iconBg}`}>
+        <Icon className={`w-[18px] h-[18px] ${iconColor}`} />
       </div>
-      <div className="flex items-baseline gap-2 mb-3">
-        <div className="font-display text-[28px] leading-none text-foreground num-tabular">
-          {latest != null ? fmt(latest) : "—"}
-        </div>
-        <div className="text-[11px] text-muted-foreground">latest</div>
+      <div className="font-display text-[24px] leading-none text-emerald-600 num-tabular tracking-tight">{value}</div>
+      <div className="text-[12px] font-semibold text-foreground mt-2">{label}</div>
+      <div className="text-[11px] text-muted-foreground mt-0.5">{sub}</div>
+    </div>
+  );
+}
+
+function RatioSummaryTable({ years, rows }: { years: string[]; rows: { label: string; values: (number | null)[]; ideal: string; fmt: (n: number) => string }[] }) {
+  return (
+    <div className="surface-card rounded-2xl overflow-hidden">
+      <div className="overflow-x-auto">
+        <Table>
+          <TableHeader>
+            <TableRow className="bg-primary hover:bg-primary border-0">
+              <TableHead className="text-eyebrow text-white/85 py-3.5 sticky left-0 bg-primary z-10">Ratio</TableHead>
+              {years.map((y) => (
+                <TableHead key={y} className="text-eyebrow text-white/85 text-right num-tabular">{y}</TableHead>
+              ))}
+              <TableHead className="text-eyebrow text-white/85 text-right">Ideal</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.map((row, ri) => {
+              const rowBg = ri % 2 === 1 ? "bg-muted/40" : "bg-card";
+              return (
+                <TableRow key={row.label} className={`border-border ${rowBg} hover:${rowBg}`}>
+                  <TableCell className={`text-[13px] font-medium text-foreground sticky left-0 z-10 ${rowBg}`}>{row.label}</TableCell>
+                  {years.map((_, i) => {
+                    const v = row.values?.[i];
+                    return (
+                      <TableCell key={i} className="text-right num-tabular text-[13px] text-primary/90">
+                        {typeof v === "number" && isFinite(v) ? row.fmt(v) : "—"}
+                      </TableCell>
+                    );
+                  })}
+                  <TableCell className="text-right text-[11.5px] text-muted-foreground whitespace-nowrap">{row.ideal}</TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
       </div>
-      <div className="h-[60px] -mx-1">
-        <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={data} margin={{ top: 4, right: 4, left: 4, bottom: 0 }}>
-            <defs>
-              <linearGradient id={`fill-${label.replace(/\s/g, "")}`} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor={color} stopOpacity={0.3} />
-                <stop offset="100%" stopColor={color} stopOpacity={0} />
-              </linearGradient>
-            </defs>
-            <Area type="monotone" dataKey="v" stroke={color} strokeWidth={2} fill={`url(#fill-${label.replace(/\s/g, "")})`} dot={false} />
-          </AreaChart>
-        </ResponsiveContainer>
-      </div>
-      {benchmarkLabel && (
-        <div className="text-[11px] text-muted-foreground mt-2 pt-2 border-t border-border">
-          {benchmarkLabel}
-        </div>
-      )}
     </div>
   );
 }

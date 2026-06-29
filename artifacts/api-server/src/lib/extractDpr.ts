@@ -31,6 +31,12 @@ CRITICAL RULES:
    - Totals: totalFunds (total sources), totalAssets (total application), netWorkingCapital (current assets − current liabilities).
    - Keep equity == netCapital and longTermLiabilities == termLoans for compatibility. Use values exactly as printed; set any line absent to null. Keep every array the same length as "years".
    - periodNote: any note about a partial first year (e.g. "FY2025-26: September to March (7 months)"), else null.
+8. For ratioAnalysis, capture the full ratio summary table when present — one value per projected year, every array the same length as "years":
+   - Liquidity & coverage: currentRatio, dscr (debt service coverage ratio, A/B), interestCoverageRatio (ICR = EBIT / interest).
+   - Profitability/return ratios — grossProfitMargin (gross profit ratio), netProfitMargin (net profit ratio), roce (return on capital employed = PAT / (capital + long-term liabilities)), returnOnAssets (ROA): record exactly as printed, whether the document shows a percentage (e.g. 42.05) or a decimal fraction (e.g. 0.42). Do not convert between the two forms.
+   - Activity: debtorsTurnover (debtors turnover ratio), debtorsCollectionDays (debtors collection period in days).
+   - Leverage & solvency: tolTw (total outside liabilities / total net worth), proprietaryRatio (net worth / total assets), debtEquityRatio.
+   - Use values exactly as printed; set any ratio absent from the document to null.
 
 Extract the following structure:
 {
@@ -106,12 +112,19 @@ Extract the following structure:
   },
   "ratioAnalysis": {
     "years": string[],
+    "dscr": (number|null)[],
     "currentRatio": (number|null)[],
-    "debtEquityRatio": (number|null)[],
     "grossProfitMargin": (number|null)[],
     "netProfitMargin": (number|null)[],
-    "returnOnEquity": (number|null)[],
-    "dscr": (number|null)[]
+    "debtorsTurnover": (number|null)[],
+    "debtorsCollectionDays": (number|null)[],
+    "tolTw": (number|null)[],
+    "roce": (number|null)[],
+    "interestCoverageRatio": (number|null)[],
+    "returnOnAssets": (number|null)[],
+    "proprietaryRatio": (number|null)[],
+    "debtEquityRatio": (number|null)[],
+    "returnOnEquity": (number|null)[]
   },
   "cashFlow": {
     "years": string[],
