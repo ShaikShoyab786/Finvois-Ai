@@ -86,6 +86,11 @@ const PIE_COLORS = [NAVY, NAVY_LIGHT, GOLD, EMERALD, PURPLE, ROSE];
 const fmtINR = (n: number | null | undefined): string =>
   n == null ? "—" : `₹${Number(n).toLocaleString("en-IN")}`;
 
+// projectCost / financeBreakdown figures are extracted already in lakhs, so
+// render them with the ₹X.XXL convention (null-safe) to match the DPR.
+const fmtLac = (n: number | null | undefined): string =>
+  n == null ? "—" : `₹${Number(n).toFixed(2)}L`;
+
 // P&L / cash-flow / balance line items are extracted in raw rupees, while
 // project-cost figures arrive already in lakhs. Auto-detect the scale per
 // chart (by its largest magnitude) so the axis always reads in lakhs (₹L),
@@ -394,13 +399,13 @@ function ProjectFinanceCard({ ed }: { ed: any }) {
             {items.map((it, i) => (
               <div key={i} className="flex justify-between items-baseline text-[13.5px]">
                 <span className="text-foreground/85">{it.label}</span>
-                <span className="font-semibold text-brand num-tabular">{fmtINR(it.amount)}</span>
+                <span className="font-semibold text-brand num-tabular">{fmtLac(it.amount)}</span>
               </div>
             ))}
             {pc?.totalCost != null && (
               <div className="flex justify-between items-baseline pt-2.5 mt-1.5 border-t border-border">
                 <span className="font-semibold text-foreground">Total Project Cost</span>
-                <span className="font-bold text-brand num-tabular">{fmtINR(pc.totalCost)}</span>
+                <span className="font-bold text-brand num-tabular">{fmtLac(pc.totalCost)}</span>
               </div>
             )}
           </div>
@@ -414,12 +419,12 @@ function ProjectFinanceCard({ ed }: { ed: any }) {
             {finance.map((f, i) => (
               <div key={i} className="flex justify-between items-baseline text-[13.5px]">
                 <span className="text-foreground/85">{f.label}</span>
-                <span className="font-semibold text-emerald-600 num-tabular">{fmtINR(f.amount)}</span>
+                <span className="font-semibold text-emerald-600 num-tabular">{fmtLac(f.amount)}</span>
               </div>
             ))}
             <div className="flex justify-between items-baseline pt-2.5 mt-1.5 border-t border-border">
               <span className="font-semibold text-foreground">Total</span>
-              <span className="font-bold text-emerald-700 num-tabular">{fmtINR(financeTotal)}</span>
+              <span className="font-bold text-emerald-700 num-tabular">{fmtLac(financeTotal)}</span>
             </div>
           </div>
         </div>
@@ -445,7 +450,7 @@ function FinanceMixPie({ ed }: { ed: any }) {
                 <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
               ))}
             </Pie>
-            <RechartsTooltip contentStyle={tooltipStyle} formatter={(v: any) => fmtINR(v as number)} />
+            <RechartsTooltip contentStyle={tooltipStyle} formatter={(v: any) => fmtLac(v as number)} />
           </PieChart>
         </ResponsiveContainer>
       </div>

@@ -46,6 +46,8 @@ CRITICAL RULES:
    - Resulting cash: grossSurplus (Gross Surplus = Total Inflows − Total Outflows), drawings (Less: Drawings), openingBalance (Opening Balance of Cash), closingBalance (Closing Balance of Cash).
    - Also set netCashFlow equal to grossSurplus (the annual net cash generated). Leave operatingCashFlow as nulls unless the document provides a distinct operating-cash figure.
    - Use values exactly as printed; set any line absent from the document to null.
+12. For implementationTimeline (the project implementation schedule / phasing, often titled "Implementation Schedule" or "Time Schedule of Implementation"), capture each phase IN ORDER as an array: phase (phase name, e.g. "Construction", "Machinery Erection", "Trial Run", "Commercial Production"), startDate (start date as printed), endDate (end / completion date as printed), status (any status note such as "Ongoing", else null). Set any absent field to null. If no schedule is present, return an empty array.
+13. For productPortfolio (the product range / list of products with capacities, often titled "Product Profile", "Product Range" or "Installed Capacity"), capture each row as an array: product (product name with specification exactly as printed, e.g. "U Bolts (20MM to 300MM)"), productionCapacity (production capacity per annum exactly as printed, e.g. "10-15 tonnes", "5 to 7 Lacs Nos"). Set any absent field to null. If no product list is present, return an empty array.
 
 Extract the following structure:
 {
@@ -220,7 +222,13 @@ Extract the following structure:
     "items": [{ "label": string, "amount": number|null }],
     "totalCost": number|null,
     "financeBreakdown": [{ "label": string, "amount": number|null, "percentage": number|null }]
-  }
+  },
+  "implementationTimeline": [
+    { "phase": string, "startDate": string|null, "endDate": string|null, "status": string|null }
+  ],
+  "productPortfolio": [
+    { "product": string, "productionCapacity": string|null }
+  ]
 }`;
 
 function extractJsonFromText(text: string): string {
@@ -259,16 +267,22 @@ export async function extractDprData(rawText: string): Promise<Record<string, un
 
   const truncatedText = rawText.slice(0, 60000);
 
-  const response = await client.messages.create({
-    model: "claude-sonnet-4-6",
-    max_tokens: 8192,
-    messages: [
-      {
-        role: "user",
-        content: `${EXTRACTION_PROMPT}\n\nDPR TEXT:\n${truncatedText}`,
-      },
-    ],
-  });
+  const response = await client.messages.create(
+    {
+      model: "claude-sonnet-4-6",
+      max_tokens: 16000,
+      messages: [
+        {
+          role: "user",
+          content: `${EXTRACTION_PROMPT}\n\nDPR TEXT:\n${truncatedText}`,
+        },
+      ],
+    },
+    // Explicit timeout: the full DPR schema can push output past the SDK's
+    // 10-minute non-streaming auto-timeout heuristic, which otherwise throws
+    // before the request is even sent. Real extractions complete in ~1-2 min.
+    { timeout: 600000 },
+  );
 
   const content = response.content[0];
   if (content.type !== "text") {

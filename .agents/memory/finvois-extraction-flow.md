@@ -25,3 +25,15 @@ display-only extraction fields, and avoids re-uploads when the prompt evolves.
 **How to apply:** when a report is missing a data point the UI needs, check the
 stored `rawText` first — the source usually already contains it; extend the
 prompt and hit the retry route rather than rebuilding upload flows.
+
+## Truncation gotcha (silent missing sections)
+
+If whole tail-of-schema sections vanish from extracted data after re-extraction,
+suspect `max_tokens` truncation, not a frontend bug. Large DPRs need a generous
+budget. **Why:** the Anthropic SDK throws "Streaming is required..." for high
+`max_tokens` unless you also pass an explicit `{ timeout }` as the 2nd arg to
+`client.messages.create`. So raise `max_tokens` AND add the explicit timeout
+together — raising the token cap alone makes the call throw. Fields are dropped in
+schema order, so the LAST fields in the prompt/JSON are the first to disappear.
+Restarting the API-server workflow is required after editing the prompt (dev does
+not hot-reload it); then re-extract via the retry route.
