@@ -53,8 +53,8 @@ CRITICAL RULES:
    - financialEvaluation.npvAnalysis (the "Present Value of Future Cash Flows & Net Present Value (NPV)" block, figures in rupees): pvFutureCashFlows (PRESENT VALUE OF FUTURE CASH FLOWS), initialInvestment (CASH OUTFLOWS), netPresentValue (NET PRESENT VALUE).
    - financialEvaluation.simplePaybackSchedule (the "Investment Payback Period (Simple Method)" table, rupees): one object per row IN ORDER. The first row is the initial outflow — set year to "Initial" with a negative cashFlow and cumulative. Each subsequent row: year (the period label exactly as printed, e.g. "2025-26 Sep to Mar", "2026-27"), cashFlow (Amount Rs for that year), cumulative (Cumulative Cash flows Rs, negative until recovered).
    - financialEvaluation.dcfPaybackSchedule (the "Investment Payback Period (Discounted Cashflows Method)" table, rupees): one object per row IN ORDER. First row is the initial outflow with year "Initial". Each subsequent row: year (period label), cashFlow (undiscounted Amount Rs), discountedCashFlow (Discounted Cash Flows Rs), cumulativeDiscounted (Cumulative Discounted Cash flows Rs).
-15. For altmanZScore (the "CALCULATION OF ALTMAN Z SCORE" table). OVERRIDE rule #3: every value must be a plain JSON NUMBER. Capture per projected year, every array the same length as "years": the supporting figures netWorkingCapital (Net Working capital), totalAssets (Total Assets), earningBeforeTax (Earning before Tax), ebit (EBIT), netEquity (Net Equity / Net Capital), totalLiabilities (Total Liabilities), sales (Sales); and the five ratio rows EXACTLY as printed — workingCapitalToTotalAssets (row "A. Working capital / Total Assets"), earningsToTotalAssets (row "B. Earning / Total Assets"), ebitToTotalAssets (row "C. EBIT / Total Assets"), equityToTotalLiabilities (row "D. Equity Capital / Total Liabilities"), salesToTotalAssets (row "E. Sales / Total Assets"); and zScore (row "Altman Z Score Formulae"). The rows are printed as run-together digit strings; split each into EXACTLY as many numbers as there are years, preserving the printed decimal places. Set the whole structure to null if the Altman table is absent.
-16. For breakEvenAnalysis (the "CALCULATION OF BREAK EVEN POINT (BEP)", "CALCULATION OF MARGIN OF SAFETY (MOS)" and "SENSITIVITY ANALYSIS" tables). OVERRIDE rule #3: every value must be a plain JSON NUMBER (no commas/symbols), and parenthesised figures like "(106,282)" are NEGATIVE numbers. Capture per projected year, every array the same length as "years": grossRevenue (Gross Revenue), variableCost (Cost of Goods Sold / Direct Costs), contribution (Contribution), sellingPricePerKg (Selling price per KG/unit), quantityKg (Quantity Manufactured in KGs/units), contributionPerKg (Contribution per KG), fixedCost (Fixed Costs), bepKg (Break Even Point in KGs), installedCapacityKg (Plant Installed capacity in KGs), operatingCapacityPct (Operating capacity %), actualSales (Actual Sales), breakEvenSales (Break even Sales), mosValue (MOS Value), mosRatio (MOS Ratio), mosPercentage (MOS Percentage), sensitivityPriceDown10 (Sensitivity EBT — "If Selling Price decrease by 10%"), sensitivityExpenseUp10 (Sensitivity EBT — "If Direct Expenses increase by 10%"). The rows are printed as run-together digit strings; split each into EXACTLY as many numbers as there are years. Set any row absent from the document to null; set the whole structure to null if none of these tables are present.
+15. For mpbfSchedule (the working-capital / "MPBF" / "Maximum Permissible Bank Finance" assessment, or the current-asset holding-levels breakdown — figures in rupees). OVERRIDE rule #3: every value must be a plain JSON NUMBER (no commas/symbols). Capture per projected year, every array the same length as "years": rawMaterialStock (Raw Material Stock), wipStock (Work-in-Progress / WIP Stock), finishedGoodsStock (Finished Goods Stock), and wcLimitSanctioned (the sanctioned Working-Capital / Cash-Credit limit — usually a single figure repeated each year). Set any row absent from the document to null; set the whole structure to null if no current-asset / working-capital breakdown is present.
+16. For productionSeries (the per-year production / sales-volume figures, usually inside the BEP table or a production schedule). OVERRIDE rule #3: every value must be a plain JSON NUMBER. Capture per projected year, every array the same length as "years": sellingPricePerKg (Selling Price per KG / per unit), installedCapacityKg (Plant Installed Capacity in KGs / units per annum), quantityKg (Quantity Manufactured / Sold in KGs / units). Set any row absent from the document to null; set the whole structure to null for service businesses or any DPR with no per-unit production figures.
 
 Extract the following structure:
 {
@@ -240,41 +240,18 @@ Extract the following structure:
   "productPortfolio": [
     { "product": string, "productionCapacity": string|null }
   ],
-  "altmanZScore": {
+  "mpbfSchedule": {
     "years": string[]|null,
-    "netWorkingCapital": number[]|null,
-    "totalAssets": number[]|null,
-    "earningBeforeTax": number[]|null,
-    "ebit": number[]|null,
-    "netEquity": number[]|null,
-    "totalLiabilities": number[]|null,
-    "sales": number[]|null,
-    "workingCapitalToTotalAssets": number[]|null,
-    "earningsToTotalAssets": number[]|null,
-    "ebitToTotalAssets": number[]|null,
-    "equityToTotalLiabilities": number[]|null,
-    "salesToTotalAssets": number[]|null,
-    "zScore": number[]|null
+    "rawMaterialStock": number[]|null,
+    "wipStock": number[]|null,
+    "finishedGoodsStock": number[]|null,
+    "wcLimitSanctioned": number[]|null
   },
-  "breakEvenAnalysis": {
+  "productionSeries": {
     "years": string[]|null,
-    "grossRevenue": number[]|null,
-    "variableCost": number[]|null,
-    "contribution": number[]|null,
     "sellingPricePerKg": number[]|null,
-    "quantityKg": number[]|null,
-    "contributionPerKg": number[]|null,
-    "fixedCost": number[]|null,
-    "bepKg": number[]|null,
     "installedCapacityKg": number[]|null,
-    "operatingCapacityPct": number[]|null,
-    "actualSales": number[]|null,
-    "breakEvenSales": number[]|null,
-    "mosValue": number[]|null,
-    "mosRatio": number[]|null,
-    "mosPercentage": number[]|null,
-    "sensitivityPriceDown10": number[]|null,
-    "sensitivityExpenseUp10": number[]|null
+    "quantityKg": number[]|null
   }
 }`;
 
@@ -347,63 +324,40 @@ export async function extractDprData(rawText: string): Promise<Record<string, un
   }
 }
 
-const SUPPLEMENTAL_PROMPT = `You are a financial analyst extracting two specific tables from the raw text of an Indian MSME DPR (Detailed Project Report).
+const SUPPLEMENTAL_PROMPT = `You are a financial analyst extracting two specific, report-specific tables from the raw text of an Indian MSME DPR (Detailed Project Report).
 
 Return ONLY valid JSON (no markdown, no commentary) with EXACTLY this shape:
 {
-  "altmanZScore": {
+  "mpbfSchedule": {
     "years": string[]|null,
-    "netWorkingCapital": number[]|null,
-    "totalAssets": number[]|null,
-    "earningBeforeTax": number[]|null,
-    "ebit": number[]|null,
-    "netEquity": number[]|null,
-    "totalLiabilities": number[]|null,
-    "sales": number[]|null,
-    "workingCapitalToTotalAssets": number[]|null,
-    "earningsToTotalAssets": number[]|null,
-    "ebitToTotalAssets": number[]|null,
-    "equityToTotalLiabilities": number[]|null,
-    "salesToTotalAssets": number[]|null,
-    "zScore": number[]|null
+    "rawMaterialStock": number[]|null,
+    "wipStock": number[]|null,
+    "finishedGoodsStock": number[]|null,
+    "wcLimitSanctioned": number[]|null
   },
-  "breakEvenAnalysis": {
+  "productionSeries": {
     "years": string[]|null,
-    "grossRevenue": number[]|null,
-    "variableCost": number[]|null,
-    "contribution": number[]|null,
     "sellingPricePerKg": number[]|null,
-    "quantityKg": number[]|null,
-    "contributionPerKg": number[]|null,
-    "fixedCost": number[]|null,
-    "bepKg": number[]|null,
     "installedCapacityKg": number[]|null,
-    "operatingCapacityPct": number[]|null,
-    "actualSales": number[]|null,
-    "breakEvenSales": number[]|null,
-    "mosValue": number[]|null,
-    "mosRatio": number[]|null,
-    "mosPercentage": number[]|null,
-    "sensitivityPriceDown10": number[]|null,
-    "sensitivityExpenseUp10": number[]|null
+    "quantityKg": number[]|null
   }
 }
 
 RULES:
 1. Every numeric value must be a plain JSON NUMBER (no commas, no currency symbols, no "%"). Parenthesised figures like "(106,282)" are NEGATIVE numbers.
-2. altmanZScore comes from the "CALCULATION OF ALTMAN Z SCORE" table. The five ratio rows are labelled "A. Working capital / Total Assets" → workingCapitalToTotalAssets, "B. Earning / Total Assets" → earningsToTotalAssets, "C. EBIT / Total Assets" → ebitToTotalAssets, "D. Equity Capital / Total Liabilities" → equityToTotalLiabilities, "E. Sales / Total Assets" → salesToTotalAssets, and "Altman Z Score Formulae" → zScore. Also capture the supporting figure rows (Net Working capital, Total Assets, Earning before Tax, EBIT, Net Equity / Net Capital, Total Liabilities, Sales).
-3. breakEvenAnalysis comes from the "CALCULATION OF BREAK EVEN POINT (BEP)", "CALCULATION OF MARGIN OF SAFETY (MOS)" and "SENSITIVITY ANALYSIS - EARNINGS BEFORE TAX" tables. sensitivityPriceDown10 is the EBT column "If Selling Price decrease by 10%"; sensitivityExpenseUp10 is "If Direct Expenses increase by 10%".
+2. mpbfSchedule comes from the working-capital / "MPBF" / "Maximum Permissible Bank Finance" assessment or the current-asset holding-levels breakdown (figures in rupees). Capture the per-year inventory split: rawMaterialStock (Raw Material Stock), wipStock (Work-in-Progress / WIP Stock), finishedGoodsStock (Finished Goods Stock), and wcLimitSanctioned (the sanctioned Working-Capital / Cash-Credit limit — usually one figure repeated each year).
+3. productionSeries comes from the BEP table or a production schedule: sellingPricePerKg (Selling Price per KG / per unit), installedCapacityKg (Plant Installed Capacity in KGs / units per annum), quantityKg (Quantity Manufactured / Sold in KGs / units).
 4. The values are printed as run-together digit strings (column separators were lost). First determine the number of projected years from the "years" header, then split EACH row into EXACTLY that many numbers, preserving the printed number of decimal places. Years usually look like "2025-26 Sep to Mar", "2026-27", … "2032-33".
-5. Set any individual row that is absent to null. Set altmanZScore (or breakEvenAnalysis) as a whole to null if that entire table is missing from the text.`;
+5. Set any individual row that is absent to null. Set mpbfSchedule (or productionSeries) as a whole to null if that entire table is missing from the text (e.g. service businesses have no production series).`;
 
 /**
- * Focused, low-cost extraction of ONLY the Altman Z-Score and Break-Even /
- * Sensitivity tables. Used to backfill these fields onto reports extracted
+ * Focused, low-cost extraction of ONLY the report-specific MPBF working-capital
+ * schedule and production series. Used to backfill these fields onto reports extracted
  * before the schema was extended, WITHOUT re-running (and overwriting) the full
- * extraction. Returns an object containing at most { altmanZScore, breakEvenAnalysis }.
+ * extraction. Returns an object containing at most { mpbfSchedule, productionSeries }.
  */
 export async function extractSupplementalDpr(rawText: string): Promise<Record<string, unknown>> {
-  logger.info({ textLength: rawText.length }, "Starting supplemental DPR extraction (Altman + BEP)");
+  logger.info({ textLength: rawText.length }, "Starting supplemental DPR extraction (MPBF + production series)");
 
   const truncatedText = rawText.slice(0, 60000);
 

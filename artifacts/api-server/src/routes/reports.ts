@@ -160,9 +160,9 @@ router.post("/reports/:id/retry", async (req, res): Promise<void> => {
   });
 });
 
-// One-off backfill: extract ONLY the Altman Z-Score + Break-Even/Sensitivity
-// tables and MERGE them into the existing extractedData without touching any
-// other previously-extracted fields.
+// One-off backfill: extract ONLY the report-specific MPBF working-capital
+// schedule + production series and MERGE them into the existing extractedData
+// without touching any other previously-extracted fields.
 router.post("/reports/:id/supplemental", async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
@@ -185,8 +185,8 @@ router.post("/reports/:id/supplemental", async (req, res): Promise<void> => {
     const supplemental = await extractSupplementalDpr(report.rawText);
     const merged = {
       ...((report.extractedData as Record<string, unknown>) ?? {}),
-      altmanZScore: supplemental.altmanZScore ?? null,
-      breakEvenAnalysis: supplemental.breakEvenAnalysis ?? null,
+      mpbfSchedule: supplemental.mpbfSchedule ?? null,
+      productionSeries: supplemental.productionSeries ?? null,
     };
     await db
       .update(reportsTable)
@@ -195,8 +195,8 @@ router.post("/reports/:id/supplemental", async (req, res): Promise<void> => {
     logger.info({ id }, "Supplemental extraction merged");
     res.json({
       id,
-      altmanZScore: supplemental.altmanZScore ?? null,
-      breakEvenAnalysis: supplemental.breakEvenAnalysis ?? null,
+      mpbfSchedule: supplemental.mpbfSchedule ?? null,
+      productionSeries: supplemental.productionSeries ?? null,
     });
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : String(err);

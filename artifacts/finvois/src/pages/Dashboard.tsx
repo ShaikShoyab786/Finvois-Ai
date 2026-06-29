@@ -2616,7 +2616,7 @@ function LoanSection({ ed, verdict, isLoadingVerdict }: { ed: any; verdict?: str
             <tfoot>
               <tr className="bg-primary text-white">
                 <td className="text-eyebrow text-white/90 py-3.5 px-4" colSpan={7}>Average</td>
-                <td className="text-right text-eyebrow text-white/90 px-4 whitespace-nowrap">Avg DSCR (Loan Period)</td>
+                <td className="text-right text-eyebrow text-white/90 px-4 whitespace-nowrap">Weighted Average DSCR over Loan Period</td>
                 <td className="text-right num-tabular text-[14px] font-semibold px-4">{isFinite(avgDscr) ? `${fmt2(avgDscr)}x` : "—"}</td>
               </tr>
             </tfoot>
@@ -2633,42 +2633,34 @@ function LoanSection({ ed, verdict, isLoadingVerdict }: { ed: any; verdict?: str
 
 // ═══════════ ALTMAN Z-SCORE ═══════════
 function AltmanSection({ ed }: { ed: any }) {
-  const az = ed?.altmanZScore;
   const bs = ed?.balanceSheet;
   const pl = ed?.plAccount;
 
-  let years: string[] = [];
-  let A: number[] = [], B: number[] = [], C: number[] = [], D: number[] = [], E: number[] = [], Z: number[] = [];
-  let computed = false;
+  // Altman Z-Score (private-firm model) computed CLIENT-SIDE from the audited
+  // financials so it ties exactly to the balance sheet & P&L of every report:
+  //   A = Working Capital / Total Assets   B = Net Profit / Total Assets
+  //   C = EBIT / Total Assets              D = Net Worth / Total Liabilities
+  //   E = Sales / Total Assets             Z = 1.2A + 1.4B + 3.3C + 0.6D + 1.0E
+  // (Total Liabilities = Total Assets − Net Worth.)
+  const years: string[] = bs?.years || pl?.years || [];
+  const TA: number[] = bs?.totalAssets || [];
+  const NWC: number[] = bs?.netWorkingCapital || [];
+  const NP: number[] = pl?.netProfit || [];
+  const EBIT: number[] = pl?.ebit || [];
+  const NETCAP: number[] = bs?.netCapital || [];
+  const SALES: number[] = pl?.revenue || [];
 
-  if (az && Array.isArray(az.zScore) && az.zScore.length) {
-    years = az.years || bs?.years || [];
-    A = az.workingCapitalToTotalAssets || [];
-    B = az.earningsToTotalAssets || [];
-    C = az.ebitToTotalAssets || [];
-    D = az.equityToTotalLiabilities || [];
-    E = az.salesToTotalAssets || [];
-    Z = az.zScore;
-  } else if (bs?.totalAssets && pl?.revenue) {
-    // Fallback: compute from balance sheet + P&L (original Altman formula).
-    computed = true;
-    years = bs.years || [];
-    const TA: number[] = bs.totalAssets || [];
-    const NWC: number[] = bs.netWorkingCapital || [];
-    const EBT: number[] = pl.ebt || [];
-    const EBIT: number[] = pl.ebit || [];
-    const EQ: number[] = bs.equity || [];
-    const SALES: number[] = pl.revenue || [];
-    const TL: number[] = (bs.termLoans || []).map((t: number, i: number) => (t || 0) + (bs.currentLiabilities?.[i] || 0));
-    A = TA.map((ta, i) => (ta ? (NWC[i] || 0) / ta : NaN));
-    B = TA.map((ta, i) => (ta ? (EBT[i] || 0) / ta : NaN));
-    C = TA.map((ta, i) => (ta ? (EBIT[i] || 0) / ta : NaN));
-    D = TL.map((tl, i) => (tl ? (EQ[i] || 0) / tl : NaN));
-    E = TA.map((ta, i) => (ta ? (SALES[i] || 0) / ta : NaN));
-    Z = A.map((a, i) => 1.2 * a + 1.4 * B[i] + 3.3 * C[i] + 0.6 * D[i] + 1.0 * E[i]);
-  }
+  const A: number[] = TA.map((ta, i) => (ta ? (NWC[i] || 0) / ta : NaN));
+  const B: number[] = TA.map((ta, i) => (ta ? (NP[i] || 0) / ta : NaN));
+  const C: number[] = TA.map((ta, i) => (ta ? (EBIT[i] || 0) / ta : NaN));
+  const D: number[] = TA.map((ta, i) => {
+    const liabilities = ta - (NETCAP[i] || 0);
+    return liabilities ? (NETCAP[i] || 0) / liabilities : NaN;
+  });
+  const E: number[] = TA.map((ta, i) => (ta ? (SALES[i] || 0) / ta : NaN));
+  const Z: number[] = A.map((a, i) => 1.2 * a + 1.4 * B[i] + 3.3 * C[i] + 0.6 * D[i] + 1.0 * E[i]);
 
-  if (!years.length || !Z.length) {
+  if (!years.length || !TA.length || !Z.some((z) => isFinite(z))) {
     return (
       <SectionPage>
         <PageHeader eyebrow="Solvency" title="Altman Z-Score Analysis" />
@@ -2690,7 +2682,7 @@ function AltmanSection({ ed }: { ed: any }) {
 
   return (
     <SectionPage>
-      <PageHeader eyebrow="Solvency" title="Altman Z-Score Analysis" description={`Financial health prediction model — FY${shortYear(years[0])} to FY${shortYear(years[years.length - 1])}.${computed ? " Computed from balance sheet & P&L." : ""}`} />
+      <PageHeader eyebrow="Solvency" title="Altman Z-Score Analysis" description={`Financial health prediction model — FY${shortYear(years[0])} to FY${shortYear(years[years.length - 1])}. Computed from balance sheet & P&L.`} />
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
         <div className="rounded-2xl border p-5 bg-rose-50 border-rose-200">
@@ -2712,8 +2704,8 @@ function AltmanSection({ ed }: { ed: any }) {
 
       <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3 mb-8">
         {years.map((y, i) => {
-          const zn = altmanZone(Z[i]);
-          const c = zoneCls[zn];
+          const valid = isFinite(Z[i]);
+          const c = valid ? zoneCls[altmanZone(Z[i])] : { card: "bg-muted/40 border-border", text: "text-muted-foreground", sub: "No data" };
           return (
             <div key={i} className={`rounded-xl border px-3 py-3 text-center ${c.card}`}>
               <div className="text-[10px] text-muted-foreground mb-1">{shortYear(y)}</div>
@@ -2788,9 +2780,10 @@ function AltmanSection({ ed }: { ed: any }) {
               <tr className="bg-primary text-white">
                 <td className="text-eyebrow text-white/90 py-3.5 px-4 whitespace-nowrap">Altman Z-Score</td>
                 {years.map((_, ci) => {
-                  const zn = altmanZone(Z[ci]);
-                  const col = zn === "safe" ? "text-emerald-300" : zn === "grey" ? "text-amber-300" : "text-rose-300";
-                  return (<td key={ci} className={`text-right num-tabular text-[13.5px] font-semibold px-4 ${col}`}>{fmt2(Z[ci])} {zn === "safe" ? "✓" : zn === "distress" ? "●" : "▲"}</td>);
+                  const valid = isFinite(Z[ci]);
+                  const zn = valid ? altmanZone(Z[ci]) : null;
+                  const col = !valid ? "text-muted-foreground" : zn === "safe" ? "text-emerald-300" : zn === "grey" ? "text-amber-300" : "text-rose-300";
+                  return (<td key={ci} className={`text-right num-tabular text-[13.5px] font-semibold px-4 ${col}`}>{fmt2(Z[ci])} {!valid ? "" : zn === "safe" ? "✓" : zn === "distress" ? "●" : "▲"}</td>);
                 })}
               </tr>
             </tfoot>
@@ -2807,20 +2800,67 @@ function AltmanSection({ ed }: { ed: any }) {
 
 // ═══════════ BREAK-EVEN POINT & SENSITIVITY ═══════════
 function BreakEvenSection({ ed }: { ed: any }) {
-  const be = ed?.breakEvenAnalysis;
   const pl = ed?.plAccount;
-  if (!be) {
-    return (
-      <SectionPage>
-        <PageHeader eyebrow="Risk Analysis" title="Break-Even Point & Sensitivity Analysis" />
-        <EmptyState />
-      </SectionPage>
-    );
-  }
-  const years: string[] = be.years || pl?.years || [];
-  const hasBep = Array.isArray(be.bepKg) && be.bepKg.some((x: number | null) => x != null);
-  const hasMos = Array.isArray(be.mosPercentage) && be.mosPercentage.some((x: number | null) => x != null);
-  const hasSens = Array.isArray(be.sensitivityPriceDown10) && be.sensitivityPriceDown10.some((x: number | null) => x != null);
+  const ps = ed?.productionSeries;
+  const years: string[] = pl?.years || [];
+
+  // Break-Even, Margin of Safety & Sensitivity are computed CLIENT-SIDE from the
+  // P&L. Per-KG figures (BEP in KGs, capacity utilisation) additionally need the
+  // report-specific production series (price/KG, qty, installed capacity) and
+  // degrade gracefully when that series is absent.
+  const at = (a: number[] | undefined, i: number): number | null => {
+    const v = Array.isArray(a) ? a[i] : undefined;
+    return v == null || !isFinite(v) ? null : v;
+  };
+  const revenue = pl?.revenue || [];
+  const cogs = pl?.costOfGoodsSold || [];
+  const grossProfit = pl?.grossProfit || [];
+  const price = ps?.sellingPricePerKg || [];
+  const qty = ps?.quantityKg || [];
+  const capacity = ps?.installedCapacityKg || [];
+
+  const be: Record<string, (number | null)[]> = {
+    grossRevenue: [], actualSales: [], variableCost: [], contribution: [],
+    fixedCost: [], breakEvenSales: [], bepKg: [], sellingPricePerKg: [],
+    quantityKg: [], contributionPerKg: [], installedCapacityKg: [],
+    operatingCapacityPct: [], mosValue: [], mosRatio: [], mosPercentage: [],
+    sensitivityPriceDown10: [], sensitivityExpenseUp10: [],
+  };
+  years.forEach((_, i) => {
+    const rev = at(revenue, i);
+    const cg = at(cogs, i);
+    const contribution = rev != null && cg != null ? rev - cg : at(grossProfit, i);
+    const fc = (at(pl?.expenses, i) || 0) + (at(pl?.depreciation, i) || 0) + (at(pl?.interest, i) || 0);
+    const fixedCost = rev != null ? fc : null;
+    const bes = contribution && contribution > 0 && rev != null ? (fixedCost as number) * rev / contribution : null;
+    const mosValue = rev != null && bes != null ? rev - bes : null;
+    const mosPct = mosValue != null && rev ? (mosValue / rev) * 100 : null;
+    const pr = at(price, i);
+    const q = at(qty, i) ?? (rev != null && pr ? rev / pr : null);
+    const cap = at(capacity, i);
+    const ebt = at(pl?.ebt, i);
+    be.grossRevenue.push(rev);
+    be.actualSales.push(rev);
+    be.variableCost.push(cg);
+    be.contribution.push(contribution);
+    be.fixedCost.push(fixedCost);
+    be.breakEvenSales.push(bes);
+    be.bepKg.push(bes != null && pr ? Math.round(bes / pr) : null);
+    be.sellingPricePerKg.push(pr);
+    be.quantityKg.push(q);
+    be.contributionPerKg.push(contribution != null && q ? contribution / q : null);
+    be.installedCapacityKg.push(cap);
+    be.operatingCapacityPct.push(q != null && cap ? (q / cap) * 100 : null);
+    be.mosValue.push(mosValue);
+    be.mosRatio.push(mosValue != null && rev ? mosValue / rev : null);
+    be.mosPercentage.push(mosPct);
+    be.sensitivityPriceDown10.push(ebt != null && rev != null ? ebt - 0.1 * rev : null);
+    be.sensitivityExpenseUp10.push(ebt != null && at(pl?.directMaterial, i) != null ? ebt - 0.1 * (at(pl?.directMaterial, i) as number) : null);
+  });
+
+  const hasBep = be.bepKg.some((x) => x != null);
+  const hasMos = be.mosPercentage.some((x) => x != null);
+  const hasSens = be.sensitivityPriceDown10.some((x) => x != null);
 
   if (!years.length || (!hasBep && !hasMos && !hasSens)) {
     return (
@@ -3033,6 +3073,15 @@ function MpbfSection({ ed }: { ed: any }) {
   const curLiab: number[] = bs?.currentLiabilities || [];
   const wcLoan: number[] = bs?.workingCapitalLoan || [];
 
+  // The DPR's MPBF schedule only itemises the raw-material / WIP / finished-goods
+  // split for some reports; when present we show those rows, otherwise inventory
+  // collapses to a single line.
+  const sched = ed?.mpbfSchedule;
+  const rm: number[] | undefined = sched?.rawMaterialStock;
+  const wip: number[] | undefined = sched?.wipStock;
+  const fg: number[] | undefined = sched?.finishedGoodsStock;
+  const hasSplit = [rm, wip, fg].some((a) => Array.isArray(a) && a.some((x) => x != null));
+
   if (!years.length || !stock.length || !curLiab.length) {
     return (
       <SectionPage>
@@ -3134,7 +3183,13 @@ function MpbfSection({ ed }: { ed: any }) {
           years={years}
           rows={[
             { kind: "section", label: "Current Assets" },
-            { label: "Inventory / Stock", values: stock, indent: true },
+            ...(hasSplit
+              ? [
+                  { label: "Raw Material Stock", values: rm, indent: true },
+                  { label: "Work-in-Progress", values: wip, indent: true },
+                  { label: "Finished Goods", values: fg, indent: true },
+                ]
+              : [{ label: "Inventory / Stock", values: stock, indent: true }]),
             { label: "Receivables / Debtors", values: recv, indent: true },
             { label: "Total Current Assets (CA)", values: totalCA, bold: true, tone: "blue" },
             { kind: "section", label: "Current Liabilities (excl. WC Loan)" },
@@ -3151,7 +3206,7 @@ function MpbfSection({ ed }: { ed: any }) {
 
       <div className="px-5 py-4 rounded-xl bg-amber-50/60 border border-amber-100">
         <span className="text-[12.5px] font-semibold text-amber-900">Note: </span>
-        <span className="text-[12.5px] text-amber-900/80 leading-relaxed">The WC loan sanctioned ({toL(wcSanctionDisplay)}) is the lower of MPBF Method 1 and Method 2. As the business grows, the working-capital requirement rises while the bank limit stays fixed, requiring greater internal accruals. Inventory is shown as a single line where the raw-material / WIP / finished-goods split is not itemised in the DPR.</span>
+        <span className="text-[12.5px] text-amber-900/80 leading-relaxed">The WC loan sanctioned ({toL(wcSanctionDisplay)}) is the lower of MPBF Method 1 and Method 2. As the business grows, the working-capital requirement rises while the bank limit stays fixed, requiring greater internal accruals.{hasSplit ? "" : " Inventory is shown as a single line where the raw-material / WIP / finished-goods split is not itemised in the DPR."}</span>
       </div>
     </SectionPage>
   );
