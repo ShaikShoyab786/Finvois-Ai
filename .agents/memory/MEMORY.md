@@ -1,1 +1,2 @@
 - [Finvois Business Profile](finvois-business-profile.md) — Timeline/ProductPortfolio render conditionally (schema lacks fields); SWOT lives only in Business Profile.
+- [Finvois data units](finvois-data-units.md) — plAccount/cashFlow line items are raw rupees; projectCost/financialSummary are lakhs. Normalise before charting together.

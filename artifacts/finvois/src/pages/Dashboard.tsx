@@ -3,7 +3,7 @@ import { useLocation, useParams } from "wouter";
 import { useGetReport, useGetReportSummary, useGetReportVerdicts } from "@workspace/api-client-react";
 import type { UseQueryOptions } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { Loader2, FileText, User, MapPin, Phone, IdCard, Zap, CalendarDays, Briefcase, GraduationCap } from "lucide-react";
+import { Loader2, FileText, User, MapPin, Phone, IdCard, Zap, CalendarDays, Briefcase, GraduationCap, Coins, Landmark, TrendingUp, CheckCircle2, Clock, Target, BarChart3, Activity } from "lucide-react";
 import {
   ResponsiveContainer,
   BarChart,
@@ -90,6 +90,18 @@ const PURPLE = "hsl(262 83% 58%)";
 const PIE_COLORS = [NAVY, NAVY_LIGHT, GOLD, EMERALD, PURPLE, ROSE];
 const fmtINR = (n: number | null | undefined): string =>
   n == null ? "—" : `₹${Number(n).toLocaleString("en-IN")}`;
+
+// P&L / cash-flow / balance line items are extracted in raw rupees, while
+// project-cost figures arrive already in lakhs. Auto-detect the scale per
+// chart (by its largest magnitude) so the axis always reads in lakhs (₹L),
+// regardless of which unit a given report happens to use.
+const lakhFormatter = (maxAbs: number) => {
+  const inRupees = maxAbs >= 1000;
+  return (v: number): string => {
+    const lk = inRupees ? v / 1e5 : v;
+    return `${Math.abs(lk) >= 100 ? Math.round(lk) : +lk.toFixed(1)}L`;
+  };
+};
 
 const tooltipStyle = {
   borderRadius: 10,
@@ -225,7 +237,7 @@ export default function Dashboard() {
             {activeTab === "profile" && <ProfileSection report={report} ed={ed} verdict={v?.profile} isLoadingVerdict={isLoadingVerdicts} />}
 
             {/* ═══════════ FINANCIAL DASHBOARD — synthesis hub ═══════════ */}
-            {activeTab === "dashboard" && <FinancialDashboardSection ed={ed} onJump={setActiveTab} />}
+            {activeTab === "dashboard" && <FinancialDashboardSection ed={ed} />}
 
             {/* ═══════════ P&L ═══════════ */}
             {activeTab === "pl" && <PLSection ed={ed} verdict={v?.pl} isLoadingVerdict={isLoadingVerdicts} />}
@@ -1235,7 +1247,7 @@ function EmploymentBlock({ ed }: { ed: any }) {
 // ═════════════════════════════════════════════════════════
 // FINANCIAL DASHBOARD — cross-statement synthesis hub
 // ═════════════════════════════════════════════════════════
-function FinancialDashboardSection({ ed, onJump }: { ed: any; onJump: (id: string) => void }) {
+function FinancialDashboardSection({ ed }: { ed: any }) {
   if (!ed) {
     return (
       <SectionPage>
@@ -1249,79 +1261,103 @@ function FinancialDashboardSection({ ed, onJump }: { ed: any; onJump: (id: strin
   const ra = ed?.ratioAnalysis;
   const cf = ed?.cashFlow;
   const fe = ed?.financialEvaluation;
+  const fs = ed?.financialSummary;
+  const pc = ed?.projectCost;
+  const ls = ed?.loanSchedule;
 
-  // Latest-year KPIs sourced across statements
-  const revArr = pl?.revenue || [];
-  const npArr = pl?.netProfit || [];
-  const lastIdx = revArr.length - 1;
-  const latestRev = lastIdx >= 0 ? revArr[lastIdx] : null;
-  const latestNp = lastIdx >= 0 ? npArr[lastIdx] : null;
-  const netMargin = latestRev && latestNp != null && latestRev !== 0 ? (latestNp / latestRev) * 100 : null;
-  const avgDscr = meanFinite(ra?.dscr || []);
-  const avgCurrent = meanFinite(ra?.currentRatio || []);
-
-  const tiles: { label: string; value: string; sub?: string }[] = [
-    {
-      label: "Latest Year Revenue",
-      value: latestRev != null ? fmtRupeesL(latestRev) : "—",
-      sub: pl?.years?.[lastIdx] ? `FY ${pl.years[lastIdx]}` : undefined,
-    },
-    {
-      label: "Latest Net Margin",
-      value: netMargin != null ? `${netMargin.toFixed(1)}%` : "—",
-      sub: latestNp != null ? `${fmtRupeesL(latestNp)} PAT` : undefined,
-    },
-    {
-      label: "Avg DSCR",
-      value: avgDscr != null ? `${avgDscr.toFixed(2)}×` : "—",
-      sub: avgDscr != null ? (avgDscr >= 1.5 ? "Above benchmark" : avgDscr >= 1.2 ? "Meets minimum" : "Below threshold") : undefined,
-    },
-    {
-      label: "Avg Current Ratio",
-      value: avgCurrent != null ? `${avgCurrent.toFixed(2)}×` : "—",
-      sub: avgCurrent != null ? (avgCurrent >= 1.5 ? "Comfortable" : avgCurrent >= 1 ? "Adequate" : "Strained") : undefined,
-    },
-    {
-      label: "Project IRR",
-      value: fe?.irr || "—",
-      sub: fe?.npv ? `NPV ${fe.npv}` : undefined,
-    },
-    {
-      label: "Simple Payback",
-      value: fe?.simplePaybackPeriod || "—",
-      sub: fe?.discountedPaybackPeriod ? `Discounted: ${fe.discountedPaybackPeriod}` : undefined,
-    },
-  ];
-
+  const num = (v: any): number | null => (typeof v === "number" && isFinite(v) ? v : null);
   const snapshot = insightFinancialSnapshot(ed);
 
-  // Mini sparkline data builders — preserve nulls so missing data
-  // creates a gap in the line, not a fabricated zero-inflection.
-  const mkSpark = (years?: number[], values?: (number | null)[]) => {
-    if (!years || !values) return [];
-    return years.map((y, i) => ({ year: y, value: values[i] ?? null }));
-  };
-  const revSpark = mkSpark(pl?.years, pl?.revenue);
-  const npSpark = mkSpark(pl?.years, pl?.netProfit);
-  const dscrSpark = mkSpark(ra?.years, ra?.dscr);
-  const cashSpark = mkSpark(cf?.years, cf?.netCashFlow);
+  // ── Headline KPIs — only rendered when the report carries the figure ──
+  const totalCost = pc?.totalCost != null ? fmtRupeesL(pc.totalCost) : (fs?.totalProjectCost || null);
+  const avgDscrNum = parseNumeric(fe?.averageDscr) ?? meanFinite(ra?.dscr || []);
+  const avgDscrStr = fe?.averageDscr || (avgDscrNum != null ? `${avgDscrNum.toFixed(2)}×` : null);
+  const npvNum = parseNumeric(fe?.npv);
 
-  const charts: { key: string; label: string; subtitle: string; data: { year: number; value: number | null }[]; color: string; jumpTo: string }[] = [
-    { key: "rev", label: "Revenue Trajectory", subtitle: "₹ in Lakhs", data: revSpark, color: NAVY, jumpTo: "pl" },
-    { key: "np", label: "Net Profit Trajectory", subtitle: "₹ in Lakhs", data: npSpark, color: GOLD, jumpTo: "pl" },
-    { key: "dscr", label: "DSCR Trend", subtitle: "× coverage", data: dscrSpark, color: NAVY_LIGHT, jumpTo: "ratios" },
-    { key: "cash", label: "Net Cash Flow", subtitle: "₹ in Lakhs", data: cashSpark, color: "hsl(142 45% 35%)", jumpTo: "cashflow" },
-  ].filter((c) => c.data.some((d) => d.value != null));
+  const kpis = [
+    { icon: Coins, label: "Total Project Cost", sub: "Capex + Working Capital", value: totalCost, valueClass: "text-blue-600", iconClass: "bg-blue-50 text-blue-600" },
+    { icon: Landmark, label: "Term Loan", sub: ls?.interestRate ? `@ ${ls.interestRate}` : "Debt funding", value: fs?.termLoan || null, valueClass: "text-sky-600", iconClass: "bg-sky-50 text-sky-600" },
+    { icon: TrendingUp, label: "IRR", sub: fe?.wacc ? `vs WACC ${fe.wacc}` : "Internal rate of return", value: fe?.irr || null, valueClass: "text-emerald-600", iconClass: "bg-emerald-50 text-emerald-600" },
+    { icon: CheckCircle2, label: "NPV", sub: npvNum != null ? (npvNum > 0 ? "Positive — Viable" : "Negative — Review") : "Net present value", value: fe?.npv || null, valueClass: "text-emerald-600", iconClass: "bg-emerald-50 text-emerald-600" },
+    { icon: Clock, label: "Payback Period", sub: "Simple method", value: fe?.simplePaybackPeriod || null, valueClass: "text-orange-600", iconClass: "bg-orange-50 text-orange-600" },
+    { icon: Target, label: "Avg DSCR", sub: "Ideal: 1.75–3.0×", value: avgDscrStr, valueClass: "text-purple-600", iconClass: "bg-purple-50 text-purple-600" },
+    { icon: BarChart3, label: "Profitability Index", sub: ">1 → Invest", value: fe?.profitabilityIndex || null, valueClass: "text-blue-600", iconClass: "bg-blue-50 text-blue-600" },
+    { icon: Activity, label: "MIRR", sub: "Modified IRR", value: fe?.mirr || null, valueClass: "text-sky-600", iconClass: "bg-sky-50 text-sky-600" },
+  ].filter((k) => k.value);
+
+  // ── Chart series — all index-aligned to their statement's own year axis ──
+  const plYears: string[] = pl?.years || [];
+  const revProfitData = plYears.map((y, i) => ({
+    year: y,
+    Revenue: num(pl?.revenue?.[i]),
+    "Gross Profit": num(pl?.grossProfit?.[i]),
+    "Net Profit": num(pl?.netProfit?.[i]),
+  }));
+  const hasRevProfit = revProfitData.some((d) => d.Revenue != null || d["Gross Profit"] != null || d["Net Profit"] != null);
+  const revMax = Math.max(0, ...revProfitData.flatMap((d) => [d.Revenue, d["Gross Profit"], d["Net Profit"]].map((x) => (x == null ? 0 : Math.abs(x)))));
+  const fmtRevL = lakhFormatter(revMax);
+
+  const marginData = plYears.map((y, i) => {
+    const rev = num(pl?.revenue?.[i]);
+    const gpAbs = num(pl?.grossProfit?.[i]);
+    const npAbs = num(pl?.netProfit?.[i]);
+    // Only derive a margin when both numerator and denominator exist — never
+    // fabricate a 0% point from missing data.
+    const gp = num(ra?.grossProfitMargin?.[i]) ?? (rev && gpAbs != null ? (gpAbs / rev) * 100 : null);
+    const np = num(ra?.netProfitMargin?.[i]) ?? (rev && npAbs != null ? (npAbs / rev) * 100 : null);
+    return { year: y, "GP %": gp != null ? +gp.toFixed(1) : null, "NP %": np != null ? +np.toFixed(1) : null };
+  });
+  const hasMargins = marginData.some((d) => d["GP %"] != null || d["NP %"] != null);
+
+  const raYears: string[] = ra?.years || [];
+  const ratioData = raYears.map((y, i) => ({
+    year: y,
+    DSCR: num(ra?.dscr?.[i]),
+    "Current Ratio": num(ra?.currentRatio?.[i]),
+    "Debt-Equity": num(ra?.debtEquityRatio?.[i]),
+  }));
+  const hasRatios = ratioData.some((d) => d.DSCR != null || d["Current Ratio"] != null || d["Debt-Equity"] != null);
+
+  const cfYears: string[] = cf?.years || [];
+  const cashSource = (cf?.netCashFlow || []).some((v: any) => num(v) != null) ? cf?.netCashFlow : cf?.operatingCashFlow;
+  const cashData = cfYears.map((y, i) => ({ year: y, value: num(cashSource?.[i]) }));
+  const hasCash = cashData.some((d) => d.value != null);
+  const cashMax = Math.max(0, ...cashData.map((d) => (d.value == null ? 0 : Math.abs(d.value))));
+  const fmtCashL = lakhFormatter(cashMax);
+
+  // ── Investment summary — skips any metric the report doesn't provide ──
+  const invRows = [
+    { label: "Total Investment", value: totalCost, tint: "bg-blue-50/70", vc: "text-blue-700" },
+    { label: "IRR", value: fe?.irr, tint: "bg-emerald-50/70", vc: "text-emerald-700" },
+    { label: "MIRR", value: fe?.mirr, tint: "bg-sky-50/70", vc: "text-sky-700" },
+    { label: "WACC", value: fe?.wacc, tint: "bg-purple-50/70", vc: "text-purple-700" },
+    { label: "NPV", value: fe?.npv, tint: "bg-emerald-50/70", vc: "text-emerald-700" },
+    { label: "Profitability Index", value: fe?.profitabilityIndex, tint: "bg-blue-50/70", vc: "text-blue-700" },
+    { label: "Break-Even Point", value: fe?.bep, tint: "bg-sky-50/70", vc: "text-sky-700" },
+    { label: "Margin of Safety", value: fe?.marginOfSafety, tint: "bg-blue-50/70", vc: "text-blue-700" },
+    { label: "Altman Z-Score", value: fe?.altmanZScore, tint: "bg-purple-50/70", vc: "text-purple-700" },
+    { label: "Average DSCR", value: avgDscrStr, tint: "bg-sky-50/70", vc: "text-sky-700" },
+    { label: "Payback (Simple)", value: fe?.simplePaybackPeriod, tint: "bg-orange-50/70", vc: "text-orange-700" },
+    { label: "Payback (DCF)", value: fe?.discountedPaybackPeriod, tint: "bg-rose-50/70", vc: "text-rose-700" },
+  ].filter((r) => r.value);
+
+  const anyChart = hasRevProfit || hasMargins || hasRatios || hasCash;
 
   return (
     <SectionPage>
-      <PageHeader
-        eyebrow="At a Glance"
-        title="Financial Dashboard"
-        description="The banker's one-glance view — signals pulled from every statement, synthesised into a single read."
-      />
+      <div className="flex items-start justify-between gap-4 flex-wrap mb-2">
+        <PageHeader
+          eyebrow="At a Glance"
+          title="Financial Dashboard"
+          description="The complete projection overview — every key figure, trend and ratio in one read."
+        />
+        {fs?.fiscalYear && (
+          <span className="shrink-0 mt-1 rounded-full bg-amber-50 text-amber-700 text-[12px] font-medium px-3.5 py-1.5 border border-amber-100">
+            {fs.fiscalYear}
+          </span>
+        )}
+      </div>
 
-      {/* AI Snapshot — Layer 1, the claim */}
       {snapshot && (
         <div className="surface-card rounded-2xl p-8 mb-8 border-l-2 border-l-brand">
           <div className="text-eyebrow text-brand mb-2">Financial Snapshot</div>
@@ -1329,52 +1365,131 @@ function FinancialDashboardSection({ ed, onJump }: { ed: any; onJump: (id: strin
         </div>
       )}
 
-      {/* 6 KPI tiles spanning all statements */}
-      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-10">
-        {tiles.map((t) => (
-          <MetricCard key={t.label} label={t.label} value={t.value} description={t.sub} />
-        ))}
-      </div>
-
-      {/* 4 mini sparklines — click any to jump to its full statement */}
-      {charts.length > 0 && (
-        <div>
-          <div className="text-eyebrow text-gold mb-4">Cross-Statement Trends</div>
-          <h3 className="font-display text-[22px] mb-5">Key Trajectories</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            {charts.map((c) => (
-              <button
-                key={c.key}
-                onClick={() => onJump(c.jumpTo)}
-                className="surface-card rounded-2xl p-6 text-left hover:border-gold/40 hover:shadow-md transition-all group"
-                data-testid={`dashboard-spark-${c.key}`}
-              >
-                <div className="flex items-start justify-between mb-3">
-                  <div>
-                    <div className="text-eyebrow text-muted-foreground mb-1">{c.subtitle}</div>
-                    <div className="font-display text-[17px] text-foreground">{c.label}</div>
-                  </div>
-                  <ArrowRight className="w-4 h-4 text-muted-foreground/60 group-hover:text-gold group-hover:translate-x-0.5 transition-all" />
-                </div>
-                <div className="h-[110px] -mx-2">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={c.data} margin={{ top: 6, right: 8, bottom: 4, left: 8 }}>
-                      <XAxis dataKey="year" tick={{ fontSize: 10, fill: "hsl(218 15% 50%)" }} axisLine={false} tickLine={false} />
-                      <YAxis hide />
-                      <RechartsTooltip
-                        contentStyle={{ fontSize: 12, borderRadius: 8, border: "1px solid hsl(218 20% 88%)" }}
-                        labelStyle={{ fontSize: 11, color: "hsl(218 15% 50%)" }}
-                      />
-                      <Line type="monotone" dataKey="value" stroke={c.color} strokeWidth={2} dot={{ r: 3, fill: c.color }} activeDot={{ r: 5 }} connectNulls={false} />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-              </button>
-            ))}
-          </div>
+      {kpis.length > 0 && (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+          {kpis.map((k) => (
+            <DashKpi key={k.label} {...k} />
+          ))}
         </div>
       )}
+
+      {anyChart && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5">
+          {hasRevProfit && (
+            <DashCard title="Revenue & Profitability" subtitle="Projected P&L summary (₹ in Lakhs)">
+              <div className="h-[280px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <ComposedChart data={revProfitData} margin={{ top: 8, right: 12, bottom: 0, left: -8 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(220 16% 92%)" vertical={false} />
+                    <XAxis dataKey="year" tick={axisTick} axisLine={false} tickLine={false} />
+                    <YAxis tick={axisTick} axisLine={false} tickLine={false} tickFormatter={fmtRevL} width={48} />
+                    <RechartsTooltip contentStyle={tooltipStyle} formatter={(val: any) => `₹${fmtRevL(Number(val))}`} />
+                    <Legend wrapperStyle={{ fontSize: 12 }} />
+                    <Area type="monotone" dataKey="Revenue" stroke={NAVY} fill={NAVY} fillOpacity={0.12} strokeWidth={2.5} connectNulls />
+                    <Line type="monotone" dataKey="Gross Profit" stroke={EMERALD} strokeWidth={2} dot={false} connectNulls />
+                    <Line type="monotone" dataKey="Net Profit" stroke={GOLD} strokeWidth={2} dot={false} connectNulls />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </div>
+            </DashCard>
+          )}
+
+          {hasMargins && (
+            <DashCard title="Profitability Margins (%)" subtitle="Gross profit % & net profit % trends">
+              <div className="h-[280px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={marginData} margin={{ top: 8, right: 12, bottom: 0, left: -8 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(220 16% 92%)" vertical={false} />
+                    <XAxis dataKey="year" tick={axisTick} axisLine={false} tickLine={false} />
+                    <YAxis tick={axisTick} axisLine={false} tickLine={false} tickFormatter={(v) => `${v}%`} />
+                    <RechartsTooltip contentStyle={tooltipStyle} />
+                    <Legend wrapperStyle={{ fontSize: 12 }} />
+                    <Line type="monotone" dataKey="GP %" stroke={NAVY} strokeWidth={2} dot={{ r: 3 }} connectNulls />
+                    <Line type="monotone" dataKey="NP %" stroke={EMERALD} strokeWidth={2} dot={{ r: 3 }} connectNulls />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </DashCard>
+          )}
+
+          {hasRatios && (
+            <DashCard title="Key Financial Ratios" subtitle="DSCR, current ratio & debt-equity">
+              <div className="h-[280px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={ratioData} margin={{ top: 8, right: 12, bottom: 0, left: -8 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(220 16% 92%)" vertical={false} />
+                    <XAxis dataKey="year" tick={axisTick} axisLine={false} tickLine={false} />
+                    <YAxis tick={axisTick} axisLine={false} tickLine={false} />
+                    <RechartsTooltip contentStyle={tooltipStyle} />
+                    <Legend wrapperStyle={{ fontSize: 12 }} />
+                    <Line type="monotone" dataKey="DSCR" stroke={NAVY} strokeWidth={2} dot={{ r: 3 }} connectNulls />
+                    <Line type="monotone" dataKey="Current Ratio" stroke={EMERALD} strokeWidth={2} dot={{ r: 3 }} connectNulls />
+                    <Line type="monotone" dataKey="Debt-Equity" stroke={PURPLE} strokeWidth={2} dot={{ r: 3 }} connectNulls />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </DashCard>
+          )}
+
+          {hasCash && (
+            <DashCard title="Net Cash Inflows (₹ Lakhs)" subtitle="Annual surplus cash generated">
+              <div className="h-[280px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={cashData} margin={{ top: 8, right: 12, bottom: 0, left: -8 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(220 16% 92%)" vertical={false} />
+                    <XAxis dataKey="year" tick={axisTick} axisLine={false} tickLine={false} />
+                    <YAxis tick={axisTick} axisLine={false} tickLine={false} tickFormatter={fmtCashL} width={48} />
+                    <RechartsTooltip contentStyle={tooltipStyle} cursor={{ fill: "hsl(221 83% 53% / 0.05)" }} formatter={(val: any) => `₹${fmtCashL(Number(val))}`} />
+                    <Bar dataKey="value" name="Net Cash Inflow" fill={NAVY} radius={[5, 5, 0, 0]} maxBarSize={46} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </DashCard>
+          )}
+        </div>
+      )}
+
+      {invRows.length > 0 && (
+        <DashCard title="Investment Summary" subtitle="Headline viability metrics at a glance">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-2">
+            {invRows.map((r) => (
+              <div key={r.label} className={`flex items-center justify-between rounded-lg px-4 py-2.5 ${r.tint}`}>
+                <span className="text-[13px] text-muted-foreground">{r.label}</span>
+                <span className={`font-display text-[15px] num-tabular font-semibold ${r.vc}`}>{r.value}</span>
+              </div>
+            ))}
+          </div>
+        </DashCard>
+      )}
+
+      {kpis.length === 0 && !anyChart && invRows.length === 0 && <EmptyState />}
     </SectionPage>
+  );
+}
+
+function DashCard({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
+  return (
+    <div className="surface-card rounded-2xl p-7">
+      <h3 className="font-display text-[18px] mb-1">{title}</h3>
+      {subtitle && <p className="text-[12.5px] text-muted-foreground mb-4">{subtitle}</p>}
+      {children}
+    </div>
+  );
+}
+
+function DashKpi({ icon: Icon, label, value, sub, valueClass, iconClass }: { icon: any; label: string; value: string | null; sub?: string; valueClass: string; iconClass: string }) {
+  return (
+    <div className="surface-card rounded-2xl p-5">
+      <div className="flex items-start justify-between mb-3">
+        <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${iconClass}`}>
+          <Icon className="w-[18px] h-[18px]" />
+        </div>
+        <span className="text-eyebrow text-muted-foreground/50">Key</span>
+      </div>
+      <div className={`font-display text-[22px] leading-[1.1] num-tabular tracking-tight ${valueClass}`}>{value || "—"}</div>
+      <div className="text-[13px] font-medium text-foreground mt-1">{label}</div>
+      {sub && <div className="text-[11.5px] text-muted-foreground mt-0.5">{sub}</div>}
+    </div>
   );
 }
 
