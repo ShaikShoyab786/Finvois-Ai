@@ -1325,6 +1325,27 @@ function FinancialDashboardSection({ ed }: { ed: any }) {
   const cashMax = Math.max(0, ...cashData.map((d) => (d.value == null ? 0 : Math.abs(d.value))));
   const fmtCashL = lakhFormatter(cashMax);
 
+  // ── Actual sales vs break-even sales ──
+  // Break-even sales is derived from the report's own P&L using the standard
+  // formula: BEP Sales = Fixed Costs ÷ Contribution Margin Ratio, where
+  // contribution ratio = grossProfit / revenue and fixed costs = operating
+  // expenses + depreciation + interest. Computed per-year only when the inputs
+  // exist (revenue, positive grossProfit, expenses) — never fabricated.
+  const bepData = plYears.map((y, i) => {
+    const rev = num(pl?.revenue?.[i]);
+    const gp = num(pl?.grossProfit?.[i]);
+    const exp = num(pl?.expenses?.[i]);
+    let bep: number | null = null;
+    if (rev != null && rev > 0 && gp != null && gp > 0 && exp != null) {
+      const fixedCost = exp + (num(pl?.depreciation?.[i]) ?? 0) + (num(pl?.interest?.[i]) ?? 0);
+      bep = (fixedCost * rev) / gp;
+    }
+    return { year: y, "Actual Sales": rev, "BEP Sales": bep };
+  });
+  const hasBep = bepData.some((d) => d["BEP Sales"] != null && d["Actual Sales"] != null);
+  const bepMax = Math.max(0, ...bepData.flatMap((d) => [d["Actual Sales"], d["BEP Sales"]].map((x) => (x == null ? 0 : Math.abs(x)))));
+  const fmtBepL = lakhFormatter(bepMax);
+
   // ── Investment summary — skips any metric the report doesn't provide ──
   const invRows = [
     { label: "Total Investment", value: totalCost, tint: "bg-blue-50/70", vc: "text-blue-700" },
@@ -1341,7 +1362,7 @@ function FinancialDashboardSection({ ed }: { ed: any }) {
     { label: "Payback (DCF)", value: fe?.discountedPaybackPeriod, tint: "bg-rose-50/70", vc: "text-rose-700" },
   ].filter((r) => r.value);
 
-  const anyChart = hasRevProfit || hasMargins || hasRatios || hasCash;
+  const anyChart = hasRevProfit || hasMargins || hasRatios || hasCash || hasBep;
 
   return (
     <SectionPage>
@@ -1441,6 +1462,24 @@ function FinancialDashboardSection({ ed }: { ed: any }) {
                     <YAxis tick={axisTick} axisLine={false} tickLine={false} tickFormatter={fmtCashL} width={48} />
                     <RechartsTooltip contentStyle={tooltipStyle} cursor={{ fill: "hsl(221 83% 53% / 0.05)" }} formatter={(val: any) => `₹${fmtCashL(Number(val))}`} />
                     <Bar dataKey="value" name="Net Cash Inflow" fill={NAVY} radius={[5, 5, 0, 0]} maxBarSize={46} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </DashCard>
+          )}
+
+          {hasBep && (
+            <DashCard title="Actual Sales vs Break-Even Sales (₹ Lakhs)" subtitle="Gap between actual and break-even shows margin of safety">
+              <div className="h-[280px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={bepData} margin={{ top: 8, right: 12, bottom: 0, left: -8 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(220 16% 92%)" vertical={false} />
+                    <XAxis dataKey="year" tick={axisTick} axisLine={false} tickLine={false} />
+                    <YAxis tick={axisTick} axisLine={false} tickLine={false} tickFormatter={fmtBepL} width={48} />
+                    <RechartsTooltip contentStyle={tooltipStyle} cursor={{ fill: "hsl(221 83% 53% / 0.05)" }} formatter={(val: any) => `₹${fmtBepL(Number(val))}`} />
+                    <Legend wrapperStyle={{ fontSize: 12 }} />
+                    <Bar dataKey="Actual Sales" fill={NAVY} radius={[5, 5, 0, 0]} maxBarSize={26} />
+                    <Bar dataKey="BEP Sales" fill={GOLD} radius={[5, 5, 0, 0]} maxBarSize={26} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
