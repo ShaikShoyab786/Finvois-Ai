@@ -34,11 +34,11 @@ export function Sidebar({ firmName, tagline, activeId, onSelect, sections }: Sid
         data-testid="sidebar-firm"
       >
         <div className="flex items-start gap-3.5">
-          <div className="flex-shrink-0 w-11 h-11 rounded-full bg-gold/15 text-gold border border-gold/30 flex items-center justify-center font-semibold text-[13px] tracking-wide">
+          <div className="flex-shrink-0 w-11 h-11 rounded-full bg-brand text-white flex items-center justify-center font-semibold text-[13px] tracking-wide shadow-sm">
             {initials}
           </div>
           <div className="min-w-0 flex-1 pt-0.5">
-            <div className="text-eyebrow text-gold/80 mb-1.5">Detailed Project Report</div>
+            <div className="text-eyebrow text-sky-300/90 mb-1.5">Detailed Project Report</div>
             <div className="font-display text-[16px] leading-[1.2] text-white line-clamp-2" title={firmName}>
               {firmName}
             </div>
@@ -70,15 +70,12 @@ export function Sidebar({ firmName, tagline, activeId, onSelect, sections }: Sid
                     data-testid={`nav-${item.id}`}
                     aria-current={isActive ? "page" : undefined}
                     className={cn(
-                      "w-full text-left px-3 py-2 rounded-md text-[13.5px] font-medium transition-all relative focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/60",
+                      "w-full text-left px-3 py-2 rounded-md text-[13.5px] font-medium transition-all relative focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60",
                       isActive
-                        ? "bg-sidebar-accent text-white"
-                        : "text-sidebar-foreground/65 hover:text-white hover:bg-sidebar-accent/40"
+                        ? "bg-sidebar-accent text-white shadow-sm"
+                        : "text-sidebar-foreground/65 hover:text-white hover:bg-white/5"
                     )}
                   >
-                    {isActive && (
-                      <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-gold rounded-r" />
-                    )}
                     {item.label}
                   </button>
                 );

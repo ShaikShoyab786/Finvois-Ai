@@ -18,7 +18,7 @@ export function BriefingCard({ summary, keyStrengths, riskFactors, isLoading }: 
     >
       {/* Executive narrative — wider */}
       <div className="lg:col-span-3 surface-card rounded-2xl p-8 md:p-10">
-        <div className="text-eyebrow text-gold mb-5">Executive Briefing</div>
+        <div className="text-eyebrow text-brand mb-5">Executive Briefing</div>
         <h2 className="font-display text-[26px] leading-[1.2] text-foreground mb-5">
           The bottom line
         </h2>

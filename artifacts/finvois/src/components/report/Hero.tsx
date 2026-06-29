@@ -24,7 +24,7 @@ export function Hero({ firmName, tagline, kpis }: HeroProps) {
         transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
         className="relative text-center max-w-3xl mx-auto"
       >
-        <div className="text-eyebrow-lg text-gold/90 mb-5" data-testid="hero-eyebrow">
+        <div className="text-eyebrow-lg text-sky-200 mb-5" data-testid="hero-eyebrow">
           Detailed Project Report
         </div>
         <h1

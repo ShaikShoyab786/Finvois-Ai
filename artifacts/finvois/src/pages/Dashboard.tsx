@@ -75,21 +75,21 @@ const NAV: NavSection[] = [
   },
 ];
 
-// Recharts palette
-const NAVY = "hsl(218 55% 14%)";
-const NAVY_LIGHT = "hsl(218 30% 45%)";
-const GOLD = "hsl(38 55% 58%)";
-const SLATE = "hsl(218 18% 50%)";
-const EMERALD = "hsl(158 55% 40%)";
-const ROSE = "hsl(0 60% 50%)";
+// Recharts palette — professional multi-color (blue / sky / orange / green / red)
+const NAVY = "hsl(221 83% 53%)";        // primary royal blue
+const NAVY_LIGHT = "hsl(199 89% 48%)";  // sky blue
+const GOLD = "hsl(32 90% 52%)";         // orange accent
+const SLATE = "hsl(215 16% 47%)";
+const EMERALD = "hsl(158 64% 40%)";
+const ROSE = "hsl(0 72% 51%)";
 
 const tooltipStyle = {
   borderRadius: 10,
-  border: "1px solid hsl(35 18% 88%)",
+  border: "1px solid hsl(220 16% 90%)",
   fontSize: 12,
   padding: "8px 12px",
   background: "white",
-  boxShadow: "0 4px 12px -2px rgb(10 20 40 / 0.08)",
+  boxShadow: "0 4px 12px -2px rgb(15 23 42 / 0.08)",
 };
 
 const axisTick = { fill: SLATE, fontSize: 11 };
@@ -231,13 +231,13 @@ export default function Dashboard() {
                             <defs>
                               <linearGradient id="financeFill" x1="0" y1="0" x2="1" y2="0">
                                 <stop offset="0%" stopColor={NAVY} stopOpacity={0.95} />
-                                <stop offset="100%" stopColor={GOLD} stopOpacity={0.85} />
+                                <stop offset="100%" stopColor={NAVY_LIGHT} stopOpacity={0.9} />
                               </linearGradient>
                             </defs>
-                            <CartesianGrid horizontal={false} stroke="hsl(35 18% 88%)" />
+                            <CartesianGrid horizontal={false} stroke="hsl(220 16% 90%)" />
                             <XAxis type="number" tick={axisTick} axisLine={false} tickLine={false} />
                             <YAxis type="category" dataKey="label" tick={{ fill: NAVY, fontSize: 12 }} axisLine={false} tickLine={false} width={120} />
-                            <RechartsTooltip cursor={{ fill: "hsl(35 20% 94%)" }} contentStyle={tooltipStyle} />
+                            <RechartsTooltip cursor={{ fill: "hsl(220 16% 95%)" }} contentStyle={tooltipStyle} />
                             <Bar dataKey="amount" fill="url(#financeFill)" radius={[0, 6, 6, 0]} />
                           </BarChart>
                         </ResponsiveContainer>
@@ -408,7 +408,7 @@ function CostRow({ label, amount, max }: { label: string; amount: number | null;
     <div className="grid grid-cols-12 items-center gap-3 py-1.5">
       <div className="col-span-4 text-[13px] text-foreground/85 truncate">{label}</div>
       <div className="col-span-6 h-[6px] rounded-full bg-muted overflow-hidden">
-        <div className="h-full bg-gradient-to-r from-primary to-gold rounded-full" style={{ width: `${pct}%` }} />
+        <div className="h-full bg-gradient-to-r from-brand to-brand-dark rounded-full" style={{ width: `${pct}%` }} />
       </div>
       <div className="col-span-2 text-right text-[13px] num-tabular font-medium text-foreground">
         {amount != null ? `₹${amount.toLocaleString("en-IN")}` : "—"}
@@ -501,7 +501,7 @@ function PLSection({ ed, verdict, isLoadingVerdict }: { ed: any; verdict?: strin
                 <stop offset="100%" stopColor={GOLD} stopOpacity={0} />
               </linearGradient>
             </defs>
-            <CartesianGrid vertical={false} stroke="hsl(35 18% 90%)" />
+            <CartesianGrid vertical={false} stroke="hsl(220 16% 90%)" />
             <XAxis dataKey="year" tick={axisTick} axisLine={false} tickLine={false} />
             <YAxis tick={axisTick} axisLine={false} tickLine={false} />
             <RechartsTooltip contentStyle={tooltipStyle} />
@@ -564,15 +564,15 @@ function BalanceSheetSection({ ed, verdict, isLoadingVerdict }: { ed: any; verdi
       >
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={chartData} stackOffset="sign" margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
-            <CartesianGrid vertical={false} stroke="hsl(35 18% 90%)" />
+            <CartesianGrid vertical={false} stroke="hsl(220 16% 90%)" />
             <XAxis dataKey="year" tick={axisTick} axisLine={false} tickLine={false} />
             <YAxis tick={axisTick} axisLine={false} tickLine={false} tickFormatter={(v) => Math.abs(v).toString()} />
             <RechartsTooltip contentStyle={tooltipStyle} formatter={(v: number) => Math.abs(v).toFixed(2)} />
             <Legend wrapperStyle={{ fontSize: 12, paddingTop: 12 }} iconType="circle" />
             <Bar dataKey="Current Assets" stackId="a" fill={NAVY_LIGHT} radius={[0, 0, 0, 0]} maxBarSize={36} />
             <Bar dataKey="Fixed Assets" stackId="a" fill={NAVY} radius={[4, 4, 0, 0]} maxBarSize={36} />
-            <Bar dataKey="Current Liab." stackId="b" fill="hsl(38 40% 78%)" radius={[0, 0, 0, 0]} maxBarSize={36} />
-            <Bar dataKey="Long-term Liab." stackId="b" fill="hsl(38 50% 65%)" radius={[0, 0, 0, 0]} maxBarSize={36} />
+            <Bar dataKey="Current Liab." stackId="b" fill="hsl(262 45% 78%)" radius={[0, 0, 0, 0]} maxBarSize={36} />
+            <Bar dataKey="Long-term Liab." stackId="b" fill="hsl(262 55% 64%)" radius={[0, 0, 0, 0]} maxBarSize={36} />
             <Bar dataKey="Equity" stackId="b" fill={GOLD} radius={[0, 0, 4, 4]} maxBarSize={36} />
           </BarChart>
         </ResponsiveContainer>
@@ -651,7 +651,7 @@ function CashFlowSection({ ed, verdict, isLoadingVerdict }: { ed: any; verdict?:
       >
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={chartData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
-            <CartesianGrid vertical={false} stroke="hsl(35 18% 90%)" />
+            <CartesianGrid vertical={false} stroke="hsl(220 16% 90%)" />
             <XAxis dataKey="year" tick={axisTick} axisLine={false} tickLine={false} />
             <YAxis tick={axisTick} axisLine={false} tickLine={false} />
             <RechartsTooltip contentStyle={tooltipStyle} />
@@ -1028,7 +1028,7 @@ function LoanSection({ ed, verdict, isLoadingVerdict }: { ed: any; verdict?: str
       >
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
-            <CartesianGrid vertical={false} stroke="hsl(35 18% 90%)" />
+            <CartesianGrid vertical={false} stroke="hsl(220 16% 90%)" />
             <XAxis dataKey="year" tick={axisTick} axisLine={false} tickLine={false} />
             <YAxis yAxisId="left" tick={axisTick} axisLine={false} tickLine={false} />
             <YAxis yAxisId="right" orientation="right" tick={axisTick} axisLine={false} tickLine={false} />
@@ -1057,18 +1057,18 @@ function LoanSection({ ed, verdict, isLoadingVerdict }: { ed: any; verdict?: str
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="bg-muted/40">
-                <th className="text-eyebrow text-muted-foreground py-3 px-4 text-left">Year</th>
-                <th className="text-eyebrow text-muted-foreground text-right px-4">Opening</th>
-                <th className="text-eyebrow text-muted-foreground text-right px-4">Principal</th>
-                <th className="text-eyebrow text-muted-foreground text-right px-4">Interest</th>
-                <th className="text-eyebrow text-muted-foreground text-right px-4">Total EMI</th>
-                <th className="text-eyebrow text-muted-foreground text-right px-4">Closing</th>
+              <tr className="bg-primary">
+                <th className="text-eyebrow text-white/85 py-3.5 px-4 text-left">Year</th>
+                <th className="text-eyebrow text-white/85 text-right px-4">Opening</th>
+                <th className="text-eyebrow text-white/85 text-right px-4">Principal</th>
+                <th className="text-eyebrow text-white/85 text-right px-4">Interest</th>
+                <th className="text-eyebrow text-white/85 text-right px-4">Total EMI</th>
+                <th className="text-eyebrow text-white/85 text-right px-4">Closing</th>
               </tr>
             </thead>
             <tbody>
               {loan.schedule.map((row: any, i: number) => (
-                <tr key={i} className="border-t border-border">
+                <tr key={i} className={`border-t border-border ${i % 2 === 1 ? "bg-muted/40" : ""}`}>
                   <td className="font-medium text-[13.5px] py-3 px-4">{row.year}</td>
                   <td className="text-right num-tabular text-[13.5px] px-4">{fmtNum(row.openingBalance)}</td>
                   <td className="text-right num-tabular text-[13.5px] px-4">{fmtNum(row.principal)}</td>
@@ -1234,8 +1234,8 @@ function FinancialDashboardSection({ ed, onJump }: { ed: any; onJump: (id: strin
 
       {/* AI Snapshot — Layer 1, the claim */}
       {snapshot && (
-        <div className="surface-card rounded-2xl p-8 mb-8 border-l-2 border-l-gold">
-          <div className="text-eyebrow text-gold mb-2">Financial Snapshot</div>
+        <div className="surface-card rounded-2xl p-8 mb-8 border-l-2 border-l-brand">
+          <div className="text-eyebrow text-brand mb-2">Financial Snapshot</div>
           <p className="font-display text-[19px] leading-[1.55] text-foreground/90">{snapshot}</p>
         </div>
       )}

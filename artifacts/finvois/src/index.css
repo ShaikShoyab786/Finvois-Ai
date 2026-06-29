@@ -71,6 +71,8 @@
   --color-navy-800: hsl(var(--navy-800));
   --color-navy-700: hsl(var(--navy-700));
   --color-slate-500: hsl(var(--slate-500));
+  --color-brand: hsl(var(--brand));
+  --color-brand-dark: hsl(var(--brand-dark));
   --color-gold: hsl(var(--gold));
   --color-gold-soft: hsl(var(--gold-soft));
   --color-cream: hsl(var(--cream));
@@ -80,8 +82,9 @@
 }
 
 /* ─────────────────────────────────────────────────────────────
-   Finvois — Premium Investor Briefing Palette
-   Deep navy chrome · warm cream content · restrained gold accent
+   Finvois — Professional Banker Palette
+   Light surfaces · white cards · navy chrome · royal-blue accent
+   Confident multi-color accents (blue / green / purple / orange / red)
    ───────────────────────────────────────────────────────────── */
 :root {
   --button-outline: rgba(0,0,0, .10);
@@ -91,73 +94,75 @@
   --elevate-2: rgba(0,0,0, .07);
 
   /* Brand palette */
-  --navy-950: 218 55% 8%;   /* #0A1428 — deepest navy, hero base */
-  --navy-900: 218 45% 12%;  /* #11203A — sidebar */
-  --navy-800: 218 38% 18%;  /* hero gradient mid */
-  --navy-700: 218 30% 28%;
-  --slate-500: 218 18% 50%;
-  --gold: 38 55% 58%;        /* #C9A961 — restrained gold */
-  --gold-soft: 38 50% 72%;
-  --cream: 36 30% 96%;       /* #F7F5EF — warm off-white content bg */
-  --verdict-viable: 158 58% 36%;
-  --verdict-warn: 32 78% 48%;
-  --verdict-risk: 0 60% 48%;
+  --navy-950: 222 47% 11%;  /* slate-900 — heading text, table headers */
+  --navy-900: 222 45% 13%;  /* sidebar */
+  --navy-800: 222 44% 18%;  /* hero gradient start */
+  --navy-700: 221 42% 30%;
+  --slate-500: 215 16% 47%;
+  --brand: 221 83% 53%;      /* #2563EB — royal-blue primary accent */
+  --brand-dark: 221 78% 45%;
+  --gold: 217 24% 52%;       /* repurposed — muted steel-blue eyebrow label */
+  --gold-soft: 217 28% 62%;
+  --cream: 220 20% 97%;      /* repurposed — light grey page background */
+  --verdict-viable: 158 64% 38%;
+  --verdict-warn: 32 90% 48%;
+  --verdict-risk: 0 72% 51%;
 
   /* Tailwind/shadcn tokens (light surface) */
   --background: var(--cream);
   --foreground: var(--navy-950);
 
-  --border: 35 18% 88%;
+  --border: 220 16% 90%;
   --card: 0 0% 100%;
   --card-foreground: var(--navy-950);
-  --card-border: 35 18% 88%;
+  --card-border: 220 16% 90%;
 
   --sidebar: var(--navy-900);
-  --sidebar-foreground: 35 30% 88%;
-  --sidebar-border: 218 30% 18%;
-  --sidebar-primary: var(--gold);
-  --sidebar-primary-foreground: var(--navy-950);
-  --sidebar-accent: 218 38% 16%;
+  --sidebar-foreground: 215 25% 80%;
+  --sidebar-border: 222 28% 22%;
+  --sidebar-primary: var(--brand);
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 221 70% 50%;
   --sidebar-accent-foreground: 0 0% 100%;
-  --sidebar-ring: var(--gold);
+  --sidebar-ring: var(--brand);
 
   --popover: 0 0% 100%;
   --popover-foreground: var(--navy-950);
-  --popover-border: 35 18% 88%;
+  --popover-border: 220 16% 90%;
 
   --primary: var(--navy-950);
   --primary-foreground: 0 0% 100%;
 
-  --secondary: var(--gold);
+  --secondary: 220 14% 96%;
   --secondary-foreground: var(--navy-950);
 
-  --muted: 35 20% 94%;
-  --muted-foreground: 218 14% 42%;
+  --muted: 220 16% 95%;
+  --muted-foreground: 215 16% 47%;
 
-  --accent: 35 20% 94%;
+  --accent: 220 16% 95%;
   --accent-foreground: var(--navy-950);
 
-  --destructive: 0 70% 50%;
+  --destructive: 0 72% 51%;
   --destructive-foreground: 0 0% 100%;
 
-  --input: 35 18% 88%;
-  --ring: var(--navy-950);
+  --input: 220 16% 90%;
+  --ring: var(--brand);
 
-  --chart-1: var(--navy-950);
-  --chart-2: var(--gold);
-  --chart-3: 218 30% 35%;
-  --chart-4: 158 40% 45%;
-  --chart-5: 218 18% 60%;
+  --chart-1: var(--brand);   /* blue */
+  --chart-2: 158 64% 40%;    /* green */
+  --chart-3: 262 60% 58%;    /* purple */
+  --chart-4: 32 90% 52%;     /* orange */
+  --chart-5: 199 89% 48%;    /* sky */
 
   --app-font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
-  --app-font-serif: 'Fraunces', 'Times New Roman', Georgia, serif;
+  --app-font-serif: 'Inter', ui-sans-serif, system-ui, sans-serif;
   --app-font-mono: 'JetBrains Mono', Menlo, monospace;
   --radius: .75rem;
 
-  --shadow-sm: 0 1px 2px 0 rgb(10 20 40 / 0.04);
-  --shadow: 0 1px 3px 0 rgb(10 20 40 / 0.06), 0 1px 2px -1px rgb(10 20 40 / 0.04);
-  --shadow-md: 0 4px 12px -2px rgb(10 20 40 / 0.08), 0 2px 4px -2px rgb(10 20 40 / 0.04);
-  --shadow-lg: 0 16px 40px -8px rgb(10 20 40 / 0.12), 0 4px 8px -4px rgb(10 20 40 / 0.06);
+  --shadow-sm: 0 1px 2px 0 rgb(15 23 42 / 0.04);
+  --shadow: 0 1px 3px 0 rgb(15 23 42 / 0.06), 0 1px 2px -1px rgb(15 23 42 / 0.04);
+  --shadow-md: 0 4px 12px -2px rgb(15 23 42 / 0.08), 0 2px 4px -2px rgb(15 23 42 / 0.04);
+  --shadow-lg: 0 16px 40px -8px rgb(15 23 42 / 0.12), 0 4px 8px -4px rgb(15 23 42 / 0.06);
 
   --sidebar-primary-border: hsl(from hsl(var(--sidebar-primary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
   --sidebar-accent-border: hsl(from hsl(var(--sidebar-accent)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
@@ -203,20 +208,20 @@
     line-height: 1;
   }
 
-  /* Display serif — large editorial headings */
+  /* Display heading — bold sans, tightened tracking (banker look) */
   .font-display {
-    font-family: var(--app-font-serif);
+    font-family: var(--app-font-sans);
     font-optical-sizing: auto;
-    font-weight: 400;
-    letter-spacing: -0.015em;
+    font-weight: 700;
+    letter-spacing: -0.02em;
   }
 
-  /* Hero gradient — deep navy with subtle warmth */
+  /* Hero gradient — navy to royal blue */
   .bg-hero-gradient {
     background:
-      radial-gradient(ellipse 80% 60% at 20% 0%, hsl(38 50% 38% / 0.18) 0%, transparent 55%),
-      radial-gradient(ellipse 60% 50% at 90% 100%, hsl(218 60% 30% / 0.5) 0%, transparent 55%),
-      linear-gradient(135deg, hsl(var(--navy-950)) 0%, hsl(var(--navy-800)) 100%);
+      radial-gradient(ellipse 70% 60% at 85% 110%, hsl(199 89% 55% / 0.35) 0%, transparent 55%),
+      radial-gradient(ellipse 80% 70% at 10% -10%, hsl(221 83% 60% / 0.30) 0%, transparent 60%),
+      linear-gradient(120deg, hsl(var(--navy-800)) 0%, hsl(221 70% 38%) 55%, hsl(221 83% 48%) 100%);
   }
 
   /* Glass KPI tile — translucent on dark hero */

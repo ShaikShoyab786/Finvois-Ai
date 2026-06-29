@@ -20,23 +20,23 @@ export function DataTable({ years, rows, format = defaultFmt }: DataTableProps) 
       <div className="overflow-x-auto">
         <Table>
           <TableHeader>
-            <TableRow className="bg-muted/40 hover:bg-muted/40">
-              <TableHead className="text-eyebrow text-muted-foreground py-3 sticky left-0 bg-muted/40 z-10">
+            <TableRow className="bg-primary hover:bg-primary border-0">
+              <TableHead className="text-eyebrow text-white/85 py-3.5 sticky left-0 bg-primary z-10">
                 Metric
               </TableHead>
               {years.map((y) => (
-                <TableHead key={y} className="text-eyebrow text-muted-foreground text-right num-tabular">
+                <TableHead key={y} className="text-eyebrow text-white/85 text-right num-tabular">
                   {y}
                 </TableHead>
               ))}
             </TableRow>
           </TableHeader>
           <TableBody>
-            {rows.map((row) => (
-              <TableRow key={row.label} className="border-border">
+            {rows.map((row, ri) => (
+              <TableRow key={row.label} className={`border-border ${ri % 2 === 1 ? "bg-muted/40" : "bg-card"} ${row.emphasis ? "bg-brand/[0.05]" : ""}`}>
                 <TableCell
-                  className={`text-[13px] sticky left-0 bg-card z-10 ${
-                    row.emphasis ? "font-semibold text-foreground" : "text-muted-foreground"
+                  className={`text-[13px] sticky left-0 z-10 ${ri % 2 === 1 ? "bg-muted/40" : "bg-card"} ${
+                    row.emphasis ? "font-semibold text-foreground bg-brand/[0.05]" : "text-muted-foreground"
                   }`}
                 >
                   {row.label}

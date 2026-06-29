@@ -6,7 +6,7 @@ type Tone = "neutral" | "good" | "warn" | "risk";
  * AI-generated "credit committee read" rendered as a discreet callout at
  * the top of each report section. Auto-detects sentiment from the verdict
  * text so the accent stripe carries an honest emotional signal — green for
- * positive reads, amber for cautious, rose for risk flags, gold for neutral.
+ * positive reads, amber for cautious, rose for risk flags, brand for neutral.
  *
  * Render unconditionally — handles its own loading/empty states so callers
  * don't have to gate on them.
@@ -20,8 +20,8 @@ export function SectionVerdict({
 }) {
   if (isLoading) {
     return (
-      <div className="surface-card rounded-2xl p-5 mb-7 relative overflow-hidden border-l-[3px] border-l-gold/40">
-        <div className="flex items-center gap-2 text-eyebrow text-gold mb-2.5">
+      <div className="surface-card rounded-2xl p-5 mb-7 relative overflow-hidden border-l-[3px] border-l-brand/40">
+        <div className="flex items-center gap-2 text-eyebrow text-brand mb-2.5">
           <Sparkles className="w-3 h-3" />
           AI Credit Read
         </div>
@@ -39,18 +39,18 @@ export function SectionVerdict({
     good: "border-l-emerald-500/70",
     warn: "border-l-amber-500/70",
     risk: "border-l-rose-500/70",
-    neutral: "border-l-gold/70",
+    neutral: "border-l-brand/70",
   }[tone];
   const dot = {
     good: "bg-emerald-500",
     warn: "bg-amber-500",
     risk: "bg-rose-500",
-    neutral: "bg-gold",
+    neutral: "bg-brand",
   }[tone];
 
   return (
     <div className={`surface-card rounded-2xl p-5 mb-7 relative overflow-hidden border-l-[3px] ${border}`}>
-      <div className="flex items-center gap-2 text-eyebrow text-gold mb-2.5">
+      <div className="flex items-center gap-2 text-eyebrow text-brand mb-2.5">
         <Sparkles className="w-3 h-3" />
         AI Credit Read
         <span className={`ml-1 w-1.5 h-1.5 rounded-full ${dot}`} />
