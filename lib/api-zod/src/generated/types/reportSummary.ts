@@ -5,6 +5,7 @@
  * Finvois AI Assistant API
  * OpenAPI spec version: 0.1.0
  */
+import type { ReportTheme } from './reportTheme';
 
 export interface ReportSummary {
   id: number;
@@ -16,4 +17,5 @@ export interface ReportSummary {
   totalProjectCost?: string | null;
   createdAt: string;
   status: string;
+  theme?: ReportTheme | null;
 }

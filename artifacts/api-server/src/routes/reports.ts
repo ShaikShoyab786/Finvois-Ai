@@ -67,6 +67,7 @@ router.post("/reports/upload", upload.single("file"), async (req, res): Promise<
     proprietorName: placeholder.proprietorName,
     createdAt: placeholder.createdAt.toISOString(),
     status: placeholder.status,
+    theme: placeholder.theme,
     extractedData: {},
   });
 
@@ -230,7 +231,47 @@ router.get("/reports/:id", async (req, res): Promise<void> => {
     proprietorName: report.proprietorName,
     createdAt: report.createdAt.toISOString(),
     status: report.status,
+    theme: report.theme,
     extractedData: report.extractedData ?? {},
+  });
+});
+
+const VALID_THEMES = ["finny", "blue", "white-gold"] as const;
+
+router.patch("/reports/:id/theme", async (req, res): Promise<void> => {
+  const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const id = parseInt(raw, 10);
+
+  if (isNaN(id)) {
+    res.status(400).json({ error: "Invalid report ID" });
+    return;
+  }
+
+  const theme = (req.body as { theme?: unknown })?.theme;
+  if (typeof theme !== "string" || !VALID_THEMES.includes(theme as (typeof VALID_THEMES)[number])) {
+    res.status(400).json({ error: `Invalid theme. Must be one of: ${VALID_THEMES.join(", ")}` });
+    return;
+  }
+
+  const [updated] = await db
+    .update(reportsTable)
+    .set({ theme })
+    .where(eq(reportsTable.id, id))
+    .returning();
+
+  if (!updated) {
+    res.status(404).json({ error: "Report not found" });
+    return;
+  }
+
+  res.json({
+    id: updated.id,
+    firmName: updated.firmName,
+    proprietorName: updated.proprietorName,
+    createdAt: updated.createdAt.toISOString(),
+    status: updated.status,
+    theme: updated.theme,
+    extractedData: updated.extractedData ?? {},
   });
 });
 

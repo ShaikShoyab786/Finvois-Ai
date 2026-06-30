@@ -142,6 +142,43 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /reports/{id}/theme:
+    patch:
+      operationId: setReportTheme
+      tags: [reports]
+      summary: Set the branding-shell theme for a report
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetReportTheme"
+      responses:
+        "200":
+          description: Updated report theme
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Report"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /reports/{id}/verdicts:
     get:
       operationId: getReportVerdicts
@@ -211,6 +248,23 @@ components:
           type: string
         status:
           type: string
+        theme:
+          $ref: "#/components/schemas/ReportTheme"
+
+    ReportTheme:
+      type: ["string", "null"]
+      description: >-
+        Branding-shell theme for a report. `null` resolves to the default
+        "blue" theme. Affects only the branding shell, never financial data.
+      enum: [finny, blue, white-gold, null]
+
+    SetReportTheme:
+      type: object
+      required: [theme]
+      properties:
+        theme:
+          type: string
+          enum: [finny, blue, white-gold]
 
     Report:
       type: object
@@ -226,6 +280,8 @@ components:
           type: string
         status:
           type: string
+        theme:
+          $ref: "#/components/schemas/ReportTheme"
         extractedData:
           $ref: "#/components/schemas/ExtractedDprData"
 

@@ -1,1 +1,2 @@
 - [Finvois DPR dashboard](finvois-dpr-dashboard.md) — Loan/Altman/BEP computed client-side from extracted financials; RM/WIP/FG split usually null (DPRs use Total CA Method); only mpbfSchedule+productionSeries extracted.
+- [Finvois theming](finvois-theming.md) — per-report 3-theme shell (finny/blue/white-gold); theme ONLY `--shell-*`+`--sidebar-*`, NEVER `--brand`/`--gold`/`--chart-*` (financial must stay identical).

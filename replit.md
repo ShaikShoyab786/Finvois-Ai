@@ -30,7 +30,20 @@ _Populate as you build — non-obvious choices a reader couldn't infer from the 
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+Finvois AI turns a Detailed Project Report (DPR) PDF into a banker-grade
+financial briefing. Flow: upload a DPR → choose a branding look (meet "Finny",
+the mascot) → cinematic processing → interactive dashboard (P&L, balance sheet,
+ratios, DSCR, Altman Z, BEP, MPBF) with an AI executive summary and per-section
+verdicts. Reports can be exported to a print/PDF view.
+
+### Branding themes (per report)
+Each report carries one of three branding-shell themes: `finny` (black/gold),
+`blue` (Professional Blue — the default), `white-gold` (Executive White, light).
+Themes restyle ONLY the branding shell (landing, theme-select, processing,
+sidebar, hero, header, export). Financial sections (KPI cards, charts, tables)
+stay pixel-identical across themes — see `.agents/memory/finvois-theming.md` for
+the token rules (`--shell-*`/`--sidebar-*` are themeable; `--brand`/`--gold`/
+`--chart-*` are NOT).
 
 ## User preferences
 

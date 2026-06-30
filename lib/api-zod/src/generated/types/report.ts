@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { ExtractedDprData } from './extractedDprData';
+import type { ReportTheme } from './reportTheme';
 
 export interface Report {
   id: number;
@@ -13,5 +14,6 @@ export interface Report {
   proprietorName: string;
   createdAt: string;
   status: string;
+  theme?: ReportTheme | null;
   extractedData: ExtractedDprData;
 }

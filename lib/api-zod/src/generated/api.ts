@@ -27,7 +27,8 @@ export const ListReportsResponseItem = zod.object({
   "lineOfActivity": zod.string().nullish(),
   "totalProjectCost": zod.string().nullish(),
   "createdAt": zod.string(),
-  "status": zod.string()
+  "status": zod.string(),
+  "theme": zod.union([zod.literal('finny'),zod.literal('blue'),zod.literal('white-gold'),zod.literal(null)]).nullish().describe('Branding-shell theme for a report. `null` resolves to the default \"blue\" theme. Affects only the branding shell, never financial data.')
 })
 export const ListReportsResponse = zod.array(ListReportsResponseItem)
 
@@ -53,6 +54,7 @@ export const GetReportResponse = zod.object({
   "proprietorName": zod.string(),
   "createdAt": zod.string(),
   "status": zod.string(),
+  "theme": zod.union([zod.literal('finny'),zod.literal('blue'),zod.literal('white-gold'),zod.literal(null)]).nullish().describe('Branding-shell theme for a report. `null` resolves to the default \"blue\" theme. Affects only the branding shell, never financial data.'),
   "extractedData": zod.object({
   "businessProfile": zod.object({
   "firmName": zod.string().nullish(),
@@ -207,6 +209,157 @@ export const GetReportSummaryResponse = zod.object({
   "keyStrengths": zod.array(zod.string()).optional(),
   "riskFactors": zod.array(zod.string()).optional(),
   "viabilityVerdict": zod.string().nullish()
+})
+
+
+/**
+ * @summary Set the branding-shell theme for a report
+ */
+export const SetReportThemeParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const SetReportThemeBody = zod.object({
+  "theme": zod.enum(['finny', 'blue', 'white-gold'])
+})
+
+export const SetReportThemeResponse = zod.object({
+  "id": zod.number(),
+  "firmName": zod.string(),
+  "proprietorName": zod.string(),
+  "createdAt": zod.string(),
+  "status": zod.string(),
+  "theme": zod.union([zod.literal('finny'),zod.literal('blue'),zod.literal('white-gold'),zod.literal(null)]).nullish().describe('Branding-shell theme for a report. `null` resolves to the default \"blue\" theme. Affects only the branding shell, never financial data.'),
+  "extractedData": zod.object({
+  "businessProfile": zod.object({
+  "firmName": zod.string().nullish(),
+  "proprietorName": zod.string().nullish(),
+  "constitution": zod.string().nullish(),
+  "lineOfActivity": zod.string().nullish(),
+  "unitAddress": zod.string().nullish(),
+  "location": zod.string().nullish(),
+  "panNo": zod.string().nullish(),
+  "aadharNo": zod.string().nullish(),
+  "mobile": zod.string().nullish(),
+  "age": zod.string().nullish(),
+  "gender": zod.string().nullish(),
+  "caste": zod.string().nullish(),
+  "education": zod.string().nullish(),
+  "experience": zod.string().nullish(),
+  "powerRequirement": zod.string().nullish(),
+  "commercialProductionDate": zod.string().nullish(),
+  "preparedBy": zod.string().nullish()
+}).optional(),
+  "financialSummary": zod.object({
+  "termLoan": zod.string().nullish(),
+  "workingCapitalLoan": zod.string().nullish(),
+  "equityCapital": zod.string().nullish(),
+  "totalProjectCost": zod.string().nullish(),
+  "averageDscr": zod.string().nullish(),
+  "fiscalYear": zod.string().nullish()
+}).optional(),
+  "plAccount": zod.object({
+  "years": zod.array(zod.string()).optional(),
+  "revenue": zod.array(zod.number().nullable()).optional(),
+  "grossProfit": zod.array(zod.number().nullable()).optional(),
+  "netProfit": zod.array(zod.number().nullable()).optional(),
+  "expenses": zod.array(zod.number().nullable()).optional(),
+  "depreciation": zod.array(zod.number().nullable()).optional(),
+  "interest": zod.array(zod.number().nullable()).optional()
+}).optional(),
+  "balanceSheet": zod.object({
+  "years": zod.array(zod.string()).optional(),
+  "currentAssets": zod.array(zod.number().nullable()).optional(),
+  "fixedAssets": zod.array(zod.number().nullable()).optional(),
+  "currentLiabilities": zod.array(zod.number().nullable()).optional(),
+  "longTermLiabilities": zod.array(zod.number().nullable()).optional(),
+  "equity": zod.array(zod.number().nullable()).optional()
+}).optional(),
+  "ratioAnalysis": zod.object({
+  "years": zod.array(zod.string()).optional(),
+  "currentRatio": zod.array(zod.number().nullable()).optional(),
+  "debtEquityRatio": zod.array(zod.number().nullable()).optional(),
+  "grossProfitMargin": zod.array(zod.number().nullable()).optional(),
+  "netProfitMargin": zod.array(zod.number().nullable()).optional(),
+  "returnOnEquity": zod.array(zod.number().nullable()).optional(),
+  "dscr": zod.array(zod.number().nullable()).optional()
+}).optional(),
+  "cashFlow": zod.object({
+  "years": zod.array(zod.string()).optional(),
+  "profitBeforeInterestTax": zod.array(zod.number().nullable()).optional(),
+  "depreciation": zod.array(zod.number().nullable()).optional(),
+  "increaseInTermLoan": zod.array(zod.number().nullable()).optional(),
+  "increaseInWcLoan": zod.array(zod.number().nullable()).optional(),
+  "increaseInCapital": zod.array(zod.number().nullable()).optional(),
+  "increaseInCapitalDuringYear": zod.array(zod.number().nullable()).optional(),
+  "totalInflows": zod.array(zod.number().nullable()).optional(),
+  "capitalExpenditure": zod.array(zod.number().nullable()).optional(),
+  "termLoanInterest": zod.array(zod.number().nullable()).optional(),
+  "ccLoanInterest": zod.array(zod.number().nullable()).optional(),
+  "termLoanRepayment": zod.array(zod.number().nullable()).optional(),
+  "increaseInReceivables": zod.array(zod.number().nullable()).optional(),
+  "increaseInStock": zod.array(zod.number().nullable()).optional(),
+  "totalOutflows": zod.array(zod.number().nullable()).optional(),
+  "grossSurplus": zod.array(zod.number().nullable()).optional(),
+  "drawings": zod.array(zod.number().nullable()).optional(),
+  "openingBalance": zod.array(zod.number().nullable()).optional(),
+  "closingBalance": zod.array(zod.number().nullable()).optional(),
+  "operatingCashFlow": zod.array(zod.number().nullable()).optional(),
+  "netCashFlow": zod.array(zod.number().nullable()).optional()
+}).optional(),
+  "loanSchedule": zod.object({
+  "termLoanAmount": zod.string().nullish(),
+  "interestRate": zod.string().nullish(),
+  "tenure": zod.string().nullish(),
+  "moratorium": zod.string().nullish(),
+  "schedule": zod.array(zod.object({
+  "year": zod.string().nullish(),
+  "openingBalance": zod.number().nullish(),
+  "principal": zod.number().nullish(),
+  "interest": zod.number().nullish(),
+  "totalEmi": zod.number().nullish(),
+  "closingBalance": zod.number().nullish()
+})).optional()
+}).optional(),
+  "swotAnalysis": zod.object({
+  "strengths": zod.array(zod.string()).optional(),
+  "weaknesses": zod.array(zod.string()).optional(),
+  "opportunities": zod.array(zod.string()).optional(),
+  "threats": zod.array(zod.string()).optional()
+}).optional(),
+  "financialEvaluation": zod.object({
+  "irr": zod.string().nullish(),
+  "mirr": zod.string().nullish(),
+  "npv": zod.string().nullish(),
+  "wacc": zod.string().nullish(),
+  "profitabilityIndex": zod.string().nullish(),
+  "simplePaybackPeriod": zod.string().nullish(),
+  "discountedPaybackPeriod": zod.string().nullish(),
+  "bep": zod.string().nullish(),
+  "marginOfSafety": zod.string().nullish(),
+  "altmanZScore": zod.string().nullish(),
+  "averageDscr": zod.string().nullish()
+}).optional(),
+  "employmentGeneration": zod.object({
+  "skilled": zod.number().nullish(),
+  "semiSkilled": zod.number().nullish(),
+  "unskilled": zod.number().nullish(),
+  "totalDirect": zod.number().nullish(),
+  "indirect": zod.number().nullish()
+}).optional(),
+  "projectCost": zod.object({
+  "items": zod.array(zod.object({
+  "label": zod.string().optional(),
+  "amount": zod.number().nullish()
+})).optional(),
+  "totalCost": zod.number().nullish(),
+  "financeBreakdown": zod.array(zod.object({
+  "label": zod.string().optional(),
+  "amount": zod.number().nullish(),
+  "percentage": zod.number().nullish()
+})).optional()
+}).optional()
+})
 })
 
 

@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation, useParams } from "wouter";
 import { useGetReport, useGetReportSummary, useGetReportVerdicts } from "@workspace/api-client-react";
+import { useTheme, resolveTheme } from "@/contexts/theme";
 import type { UseQueryOptions } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Loader2, FileText, User, MapPin, Phone, IdCard, Zap, CalendarDays, Briefcase, GraduationCap, Coins, Landmark, TrendingUp, TrendingDown, CheckCircle2, Clock, Target, BarChart3, Activity, Scale, Shield } from "lucide-react";
@@ -161,6 +162,13 @@ export default function Dashboard() {
   const { data: summary, isLoading: isLoadingSummary } = useGetReportSummary(id, { query: aiQuery as never });
   const { data: verdictsData, isLoading: isLoadingVerdicts } = useGetReportVerdicts(id, { query: aiQuery as never });
   const v = verdictsData?.verdicts;
+
+  // Adopt the report's saved branding theme (null → "blue"). Affects only the
+  // branding shell — financial sections render identically across themes.
+  const { setTheme } = useTheme();
+  useEffect(() => {
+    setTheme(resolveTheme(report?.theme));
+  }, [report?.theme, setTheme]);
 
   if (isLoading) {
     return (

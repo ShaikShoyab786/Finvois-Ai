@@ -1,13 +1,22 @@
+import { useEffect } from "react";
 import { useParams, Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ArrowLeft, Printer } from "lucide-react";
 import { useGetReport } from "@workspace/api-client-react";
+import { useTheme, resolveTheme } from "@/contexts/theme";
 
 export default function Export() {
   const params = useParams();
   const id = parseInt(params.id || "0");
   const { data: report } = useGetReport(id);
+
+  // Export adopts the report's branding theme so the PDF/print shell matches
+  // the dashboard. Financial content stays identical across themes.
+  const { setTheme } = useTheme();
+  useEffect(() => {
+    setTheme(resolveTheme(report?.theme));
+  }, [report?.theme, setTheme]);
 
   const handlePrint = () => {
     document.body.classList.add("print-white");
@@ -43,7 +52,12 @@ export default function Export() {
         </Card>
 
         <div className="flex justify-end pt-6 border-t">
-          <Button size="lg" onClick={handlePrint} data-testid="button-trigger-print">
+          <Button
+            size="lg"
+            onClick={handlePrint}
+            className="bg-shell-accent text-shell-accent-foreground hover:opacity-90"
+            data-testid="button-trigger-print"
+          >
             <Printer className="w-4 h-4 mr-2" /> Generate PDF / Print
           </Button>
         </div>

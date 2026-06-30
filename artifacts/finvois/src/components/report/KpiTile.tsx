@@ -20,9 +20,9 @@ export function KpiTile({ label, value, variant = "glass" }: KpiTileProps) {
 
   if (variant === "glass") {
     return (
-      <div className="bg-glass-tile rounded-xl px-6 py-5 group transition-all hover:bg-white/[0.09]" data-testid={`kpi-${label}`}>
-        <div className="text-eyebrow text-white/55 mb-3">{label}</div>
-        <div className={`font-display ${sizeGlass} leading-[1.15] text-white num-tabular tracking-tight`}>
+      <div className="bg-glass-tile rounded-xl px-6 py-5 group transition-all" data-testid={`kpi-${label}`}>
+        <div className="text-eyebrow text-shell-tile-label mb-3">{label}</div>
+        <div className={`font-display ${sizeGlass} leading-[1.15] text-shell-tile-fg num-tabular tracking-tight`}>
           {display}
         </div>
       </div>

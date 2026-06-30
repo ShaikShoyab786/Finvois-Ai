@@ -17,6 +17,19 @@ export interface ReportUpload {
   filename: string;
 }
 
+/**
+ * Branding-shell theme for a report. `null` resolves to the default "blue" theme. Affects only the branding shell, never financial data.
+ * @nullable
+ */
+export type ReportTheme = typeof ReportTheme[keyof typeof ReportTheme] | null;
+
+
+export const ReportTheme = {
+  finny: 'finny',
+  blue: 'blue',
+  'white-gold': 'white-gold',
+} as const;
+
 export interface ReportSummary {
   id: number;
   firmName: string;
@@ -27,6 +40,20 @@ export interface ReportSummary {
   totalProjectCost?: string | null;
   createdAt: string;
   status: string;
+  theme?: ReportTheme | null;
+}
+
+export type SetReportThemeTheme = typeof SetReportThemeTheme[keyof typeof SetReportThemeTheme];
+
+
+export const SetReportThemeTheme = {
+  finny: 'finny',
+  blue: 'blue',
+  'white-gold': 'white-gold',
+} as const;
+
+export interface SetReportTheme {
+  theme: SetReportThemeTheme;
 }
 
 export interface BusinessProfile {
@@ -247,6 +274,7 @@ export interface Report {
   proprietorName: string;
   createdAt: string;
   status: string;
+  theme?: ReportTheme | null;
   extractedData: ExtractedDprData;
 }
 

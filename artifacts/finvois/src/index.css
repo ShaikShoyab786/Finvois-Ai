@@ -79,6 +79,15 @@
   --color-verdict-viable: hsl(var(--verdict-viable));
   --color-verdict-warn: hsl(var(--verdict-warn));
   --color-verdict-risk: hsl(var(--verdict-risk));
+
+  /* Branding-shell theme tokens (themeable; never used by financial sections) */
+  --color-shell-accent: var(--shell-accent);
+  --color-shell-accent-foreground: var(--shell-accent-foreground);
+  --color-shell-hero-fg: var(--shell-hero-fg);
+  --color-shell-hero-eyebrow: var(--shell-hero-eyebrow);
+  --color-shell-tile-fg: var(--shell-tile-fg);
+  --color-shell-tile-label: var(--shell-tile-label);
+  --color-sidebar-heading: var(--sidebar-heading);
 }
 
 /* ─────────────────────────────────────────────────────────────
@@ -154,6 +163,28 @@
   --chart-4: 32 90% 52%;     /* orange */
   --chart-5: 199 89% 48%;    /* sky */
 
+  /* ── Branding-shell tokens — default = "Professional Blue" (matches today) ──
+     These power ONLY the shell (sidebar, hero banner, landing, processing,
+     shell buttons). They are intentionally separate from --brand/--gold/--chart
+     so financial sections stay pixel-identical across every theme. */
+  --sidebar-heading: #ffffff;
+  --shell-accent: hsl(221 83% 53%);
+  --shell-accent-foreground: #ffffff;
+  --shell-hero-fg: #ffffff;
+  --shell-hero-eyebrow: hsl(199 95% 86%);
+  --shell-hero-gradient:
+    radial-gradient(ellipse 70% 60% at 85% 110%, hsl(199 89% 55% / 0.35) 0%, transparent 55%),
+    radial-gradient(ellipse 80% 70% at 10% -10%, hsl(221 83% 60% / 0.30) 0%, transparent 60%),
+    linear-gradient(120deg, hsl(var(--navy-800)) 0%, hsl(221 70% 38%) 55%, hsl(221 83% 48%) 100%);
+  --shell-tile-bg: linear-gradient(135deg, rgb(255 255 255 / 0.07) 0%, rgb(255 255 255 / 0.02) 100%);
+  --shell-tile-border: rgb(255 255 255 / 0.08);
+  --shell-tile-fg: #ffffff;
+  --shell-tile-label: rgb(255 255 255 / 0.55);
+  --shell-stage-bg:
+    radial-gradient(ellipse 90% 60% at 50% -5%, hsl(221 83% 34% / 0.85) 0%, transparent 60%),
+    radial-gradient(ellipse 70% 50% at 85% 105%, hsl(199 89% 45% / 0.45) 0%, transparent 55%),
+    linear-gradient(160deg, hsl(222 47% 9%) 0%, hsl(221 55% 15%) 100%);
+
   --app-font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
   --app-font-serif: 'Inter', ui-sans-serif, system-ui, sans-serif;
   --app-font-mono: 'JetBrains Mono', Menlo, monospace;
@@ -171,6 +202,103 @@
   --muted-border: hsl(from hsl(var(--muted)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
   --accent-border: hsl(from hsl(var(--accent)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
   --destructive-border: hsl(from hsl(var(--destructive)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+}
+
+/* ════════════════════════════════════════════════════════════════
+   BRANDING-SHELL THEMES
+   Each block overrides ONLY shell + sidebar tokens. It never touches
+   --brand, --gold, or --chart-* — so KPI cards, charts, tables and
+   graphs render pixel-identical regardless of the active theme.
+   ════════════════════════════════════════════════════════════════ */
+
+/* Professional Blue — explicit (identical to :root default) */
+[data-theme="blue"] {
+  --sidebar: var(--navy-900);
+  --sidebar-foreground: 215 25% 80%;
+  --sidebar-border: 222 28% 22%;
+  --sidebar-primary: var(--brand);
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 221 70% 50%;
+  --sidebar-accent-foreground: 0 0% 100%;
+  --sidebar-ring: var(--brand);
+  --sidebar-heading: #ffffff;
+
+  --shell-accent: hsl(221 83% 53%);
+  --shell-accent-foreground: #ffffff;
+  --shell-hero-fg: #ffffff;
+  --shell-hero-eyebrow: hsl(199 95% 86%);
+  --shell-hero-gradient:
+    radial-gradient(ellipse 70% 60% at 85% 110%, hsl(199 89% 55% / 0.35) 0%, transparent 55%),
+    radial-gradient(ellipse 80% 70% at 10% -10%, hsl(221 83% 60% / 0.30) 0%, transparent 60%),
+    linear-gradient(120deg, hsl(var(--navy-800)) 0%, hsl(221 70% 38%) 55%, hsl(221 83% 48%) 100%);
+  --shell-tile-bg: linear-gradient(135deg, rgb(255 255 255 / 0.07) 0%, rgb(255 255 255 / 0.02) 100%);
+  --shell-tile-border: rgb(255 255 255 / 0.08);
+  --shell-tile-fg: #ffffff;
+  --shell-tile-label: rgb(255 255 255 / 0.55);
+  --shell-stage-bg:
+    radial-gradient(ellipse 90% 60% at 50% -5%, hsl(221 83% 34% / 0.85) 0%, transparent 60%),
+    radial-gradient(ellipse 70% 50% at 85% 105%, hsl(199 89% 45% / 0.45) 0%, transparent 55%),
+    linear-gradient(160deg, hsl(222 47% 9%) 0%, hsl(221 55% 15%) 100%);
+}
+
+/* Finny — signature Black & Gold */
+[data-theme="finny"] {
+  --sidebar: 240 6% 8%;
+  --sidebar-foreground: 43 24% 74%;
+  --sidebar-border: 240 5% 18%;
+  --sidebar-primary: 43 74% 52%;
+  --sidebar-primary-foreground: 240 10% 8%;
+  --sidebar-accent: 43 74% 52%;
+  --sidebar-accent-foreground: 240 10% 8%;
+  --sidebar-ring: 43 74% 52%;
+  --sidebar-heading: #ffffff;
+
+  --shell-accent: hsl(43 74% 52%);
+  --shell-accent-foreground: hsl(240 10% 8%);
+  --shell-hero-fg: #ffffff;
+  --shell-hero-eyebrow: hsl(43 80% 64%);
+  --shell-hero-gradient:
+    radial-gradient(ellipse 70% 60% at 85% 110%, hsl(43 74% 45% / 0.32) 0%, transparent 55%),
+    radial-gradient(ellipse 80% 70% at 10% -10%, hsl(43 60% 40% / 0.22) 0%, transparent 60%),
+    linear-gradient(120deg, hsl(240 8% 7%) 0%, hsl(240 7% 12%) 55%, hsl(43 30% 16%) 100%);
+  --shell-tile-bg: linear-gradient(135deg, rgb(212 160 23 / 0.12) 0%, rgb(212 160 23 / 0.02) 100%);
+  --shell-tile-border: rgb(212 160 23 / 0.22);
+  --shell-tile-fg: #ffffff;
+  --shell-tile-label: rgb(234 215 160 / 0.62);
+  --shell-stage-bg:
+    radial-gradient(ellipse 90% 60% at 50% -5%, hsl(43 60% 22% / 0.9) 0%, transparent 60%),
+    radial-gradient(ellipse 70% 50% at 85% 105%, hsl(43 74% 30% / 0.5) 0%, transparent 55%),
+    linear-gradient(160deg, hsl(240 8% 5%) 0%, hsl(240 6% 10%) 100%);
+}
+
+/* Executive White — luxury White & Gold (light shell) */
+[data-theme="white-gold"] {
+  --sidebar: 40 30% 97%;
+  --sidebar-foreground: 222 18% 38%;
+  --sidebar-border: 40 22% 86%;
+  --sidebar-primary: 38 58% 45%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 38 55% 50%;
+  --sidebar-accent-foreground: 0 0% 100%;
+  --sidebar-ring: 38 58% 45%;
+  --sidebar-heading: hsl(222 47% 18%);
+
+  --shell-accent: hsl(38 58% 45%);
+  --shell-accent-foreground: #ffffff;
+  --shell-hero-fg: hsl(222 47% 16%);
+  --shell-hero-eyebrow: hsl(38 55% 38%);
+  --shell-hero-gradient:
+    radial-gradient(ellipse 70% 60% at 85% 110%, hsl(43 80% 75% / 0.55) 0%, transparent 55%),
+    radial-gradient(ellipse 80% 70% at 10% -10%, hsl(40 60% 88% / 0.6) 0%, transparent 60%),
+    linear-gradient(120deg, hsl(40 45% 97%) 0%, hsl(40 40% 93%) 55%, hsl(43 50% 88%) 100%);
+  --shell-tile-bg: linear-gradient(135deg, rgb(255 255 255 / 0.65) 0%, rgb(255 255 255 / 0.32) 100%);
+  --shell-tile-border: rgb(180 140 50 / 0.30);
+  --shell-tile-fg: hsl(222 47% 16%);
+  --shell-tile-label: rgb(120 95 40 / 0.78);
+  --shell-stage-bg:
+    radial-gradient(ellipse 90% 60% at 50% -5%, hsl(43 70% 86% / 0.9) 0%, transparent 60%),
+    radial-gradient(ellipse 70% 50% at 85% 105%, hsl(40 55% 82% / 0.6) 0%, transparent 55%),
+    linear-gradient(160deg, hsl(40 40% 98%) 0%, hsl(40 30% 93%) 100%);
 }
 
 @layer base {
@@ -216,19 +344,21 @@
     letter-spacing: -0.02em;
   }
 
-  /* Hero gradient — navy to royal blue */
+  /* Hero gradient — themed via shell tokens (default = navy→royal blue) */
   .bg-hero-gradient {
-    background:
-      radial-gradient(ellipse 70% 60% at 85% 110%, hsl(199 89% 55% / 0.35) 0%, transparent 55%),
-      radial-gradient(ellipse 80% 70% at 10% -10%, hsl(221 83% 60% / 0.30) 0%, transparent 60%),
-      linear-gradient(120deg, hsl(var(--navy-800)) 0%, hsl(221 70% 38%) 55%, hsl(221 83% 48%) 100%);
+    background: var(--shell-hero-gradient);
   }
 
-  /* Glass KPI tile — translucent on dark hero */
+  /* Full-screen branding stage gradient (landing / processing) */
+  .bg-shell-stage {
+    background: var(--shell-stage-bg);
+  }
+
+  /* Glass KPI tile — translucent, themed via shell tokens */
   .bg-glass-tile {
-    background: linear-gradient(135deg, rgb(255 255 255 / 0.07) 0%, rgb(255 255 255 / 0.02) 100%);
+    background: var(--shell-tile-bg);
     backdrop-filter: blur(8px);
-    border: 1px solid rgb(255 255 255 / 0.08);
+    border: 1px solid var(--shell-tile-border);
   }
 
   /* Subtle hairline divider on dark surfaces */

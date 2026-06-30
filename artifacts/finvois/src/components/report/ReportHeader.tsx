@@ -67,7 +67,7 @@ export function ReportHeader({ reportId, fiscalYear, verdict }: ReportHeaderProp
           <Link href={`/reports/${reportId}/export`}>
             <Button
               size="sm"
-              className="bg-primary text-primary-foreground hover:bg-primary/90 gap-2 h-9 px-4 ml-1"
+              className="bg-shell-accent text-shell-accent-foreground hover:opacity-90 gap-2 h-9 px-4 ml-1"
               data-testid="button-export"
             >
               <Download className="w-3.5 h-3.5" /> Export

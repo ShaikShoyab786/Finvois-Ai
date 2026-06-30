@@ -9,6 +9,7 @@ export const reportsTable = pgTable("reports", {
   lineOfActivity: text("line_of_activity"),
   totalProjectCost: text("total_project_cost"),
   status: text("status").notNull().default("processing"),
+  theme: text("theme"),
   extractedData: jsonb("extracted_data"),
   rawText: text("raw_text"),
   errorMessage: text("error_message"),

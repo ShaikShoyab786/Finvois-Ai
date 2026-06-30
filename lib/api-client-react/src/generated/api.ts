@@ -26,7 +26,8 @@ import type {
   Report,
   ReportSummary,
   ReportUpload,
-  SectionVerdicts
+  SectionVerdicts,
+  SetReportTheme
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -492,6 +493,78 @@ export function useGetReportSummary<TData = Awaited<ReturnType<typeof getReportS
 
 
 
+
+export const getSetReportThemeUrl = (id: number,) => {
+
+
+
+
+  return `/api/reports/${id}/theme`
+}
+
+/**
+ * @summary Set the branding-shell theme for a report
+ */
+export const setReportTheme = async (id: number,
+    setReportTheme: SetReportTheme, options?: RequestInit): Promise<Report> => {
+
+  return customFetch<Report>(getSetReportThemeUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      setReportTheme,)
+  }
+);}
+
+
+
+
+export const getSetReportThemeMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setReportTheme>>, TError,{id: number;data: BodyType<SetReportTheme>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof setReportTheme>>, TError,{id: number;data: BodyType<SetReportTheme>}, TContext> => {
+
+const mutationKey = ['setReportTheme'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof setReportTheme>>, {id: number;data: BodyType<SetReportTheme>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  setReportTheme(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SetReportThemeMutationResult = NonNullable<Awaited<ReturnType<typeof setReportTheme>>>
+    export type SetReportThemeMutationBody = BodyType<SetReportTheme>
+    export type SetReportThemeMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Set the branding-shell theme for a report
+ */
+export const useSetReportTheme = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setReportTheme>>, TError,{id: number;data: BodyType<SetReportTheme>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof setReportTheme>>,
+        TError,
+        {id: number;data: BodyType<SetReportTheme>},
+        TContext
+      > => {
+      return useMutation(getSetReportThemeMutationOptions(options));
+    }
 
 export const getGetReportVerdictsUrl = (id: number,) => {
 

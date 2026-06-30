@@ -34,12 +34,12 @@ export function Sidebar({ firmName, tagline, activeId, onSelect, sections }: Sid
         data-testid="sidebar-firm"
       >
         <div className="flex items-start gap-3.5">
-          <div className="flex-shrink-0 w-11 h-11 rounded-full bg-brand text-white flex items-center justify-center font-semibold text-[13px] tracking-wide shadow-sm">
+          <div className="flex-shrink-0 w-11 h-11 rounded-full bg-shell-accent text-shell-accent-foreground flex items-center justify-center font-semibold text-[13px] tracking-wide shadow-sm">
             {initials}
           </div>
           <div className="min-w-0 flex-1 pt-0.5">
-            <div className="text-eyebrow text-sky-300/90 mb-1.5">Detailed Project Report</div>
-            <div className="font-display text-[16px] leading-[1.2] text-white line-clamp-2" title={firmName}>
+            <div className="text-eyebrow text-shell-accent mb-1.5">Detailed Project Report</div>
+            <div className="font-display text-[16px] leading-[1.2] text-sidebar-heading line-clamp-2" title={firmName}>
               {firmName}
             </div>
             {tagline && (
@@ -70,10 +70,10 @@ export function Sidebar({ firmName, tagline, activeId, onSelect, sections }: Sid
                     data-testid={`nav-${item.id}`}
                     aria-current={isActive ? "page" : undefined}
                     className={cn(
-                      "w-full text-left px-3 py-2 rounded-md text-[13.5px] font-medium transition-all relative focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/60",
+                      "w-full text-left px-3 py-2 rounded-md text-[13.5px] font-medium transition-all relative focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring/60",
                       isActive
-                        ? "bg-sidebar-accent text-white shadow-sm"
-                        : "text-sidebar-foreground/65 hover:text-white hover:bg-white/5"
+                        ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-sm"
+                        : "text-sidebar-foreground/65 hover:text-sidebar-heading hover:bg-sidebar-foreground/5"
                     )}
                   >
                     {item.label}
@@ -88,7 +88,7 @@ export function Sidebar({ firmName, tagline, activeId, onSelect, sections }: Sid
       {/* Footer mark */}
       <div className="px-7 py-5 border-t border-sidebar-border">
         <div className="text-eyebrow text-sidebar-foreground/40 mb-1">Prepared by</div>
-        <div className="font-display text-[15px] text-white">Finvois AI</div>
+        <div className="font-display text-[15px] text-sidebar-heading">Finvois AI</div>
       </div>
     </aside>
   );
