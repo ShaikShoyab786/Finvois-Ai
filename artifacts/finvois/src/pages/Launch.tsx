@@ -3,6 +3,16 @@ import { useLocation, useParams } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import { useGetReport, useSetReportTheme } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Loader2, ArrowRight, Check, AlertCircle } from "lucide-react";
 import {
   useTheme,
@@ -50,6 +60,7 @@ export default function Launch() {
   const [step, setStep] = useState<Step>("select");
   const [selected, setSelected] = useState<ThemeId | null>(null);
   const [preview, setPreview] = useState<ThemeId>("finny");
+  const [pendingTheme, setPendingTheme] = useState<ThemeId | null>(null);
   const [progress, setProgress] = useState(0);
   const startedAt = useRef<number | null>(null);
   const lastPoll = useRef(0);
@@ -201,7 +212,7 @@ export default function Launch() {
                     type="button"
                     onMouseEnter={() => !selected && setPreview(tid)}
                     onFocus={() => !selected && setPreview(tid)}
-                    onClick={() => handleChoose(tid)}
+                    onClick={() => { setPreview(tid); setPendingTheme(tid); }}
                     disabled={setThemeMutation.isPending}
                     data-testid={`theme-card-${tid}`}
                     className={`group relative text-left rounded-2xl p-5 transition-all focus:outline-none ${
@@ -272,7 +283,7 @@ export default function Launch() {
             <div className="flex justify-center mt-8">
               <Button
                 size="lg"
-                onClick={() => handleChoose(activeTheme)}
+                onClick={() => setPendingTheme(activeTheme)}
                 disabled={setThemeMutation.isPending}
                 className="bg-shell-accent text-shell-accent-foreground hover:opacity-90 gap-2 px-8"
                 data-testid="button-confirm-theme"
@@ -385,6 +396,44 @@ export default function Launch() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      <AlertDialog
+        open={pendingTheme !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingTheme(null);
+        }}
+      >
+        <AlertDialogContent data-testid="dialog-confirm-theme">
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Continue with {pendingTheme ? THEMES[pendingTheme].name : ""}?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to proceed with{" "}
+              {pendingTheme ? THEMES[pendingTheme].name : ""}? This branding will
+              be applied to your report — you can change it later from the
+              dashboard.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-theme">
+              Go back
+            </AlertDialogCancel>
+            <AlertDialogAction
+              data-testid="button-proceed-theme"
+              onClick={() => {
+                if (pendingTheme) {
+                  const chosen = pendingTheme;
+                  setPendingTheme(null);
+                  handleChoose(chosen);
+                }
+              }}
+            >
+              Yes, proceed
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

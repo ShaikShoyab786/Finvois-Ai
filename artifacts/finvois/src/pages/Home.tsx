@@ -244,15 +244,28 @@ export default function Home() {
               <h2 className="font-display text-2xl text-shell-tile-fg">Recent Reports</h2>
               <p className="text-shell-tile-label text-sm mt-0.5">Previously analyzed project reports</p>
             </div>
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => refetch()}
-              className="border-white/15 bg-white/5 text-shell-tile-fg hover:bg-white/10"
-              data-testid="button-refresh"
-            >
-              <RefreshCw className="w-4 h-4" />
-            </Button>
+            <div className="flex items-center gap-2">
+              {reports && reports.length > 3 && (
+                <Link href="/reports">
+                  <Button
+                    variant="outline"
+                    className="border-white/15 bg-white/5 text-shell-tile-fg hover:bg-white/10 gap-2"
+                    data-testid="button-view-all"
+                  >
+                    More <ArrowRight className="w-4 h-4" />
+                  </Button>
+                </Link>
+              )}
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => refetch()}
+                className="border-white/15 bg-white/5 text-shell-tile-fg hover:bg-white/10"
+                data-testid="button-refresh"
+              >
+                <RefreshCw className="w-4 h-4" />
+              </Button>
+            </div>
           </div>
 
           {isLoading ? (
@@ -283,7 +296,7 @@ export default function Home() {
             </div>
           ) : (
             <div className="space-y-3">
-              {reports?.map((report) => (
+              {reports?.slice(0, 3).map((report) => (
                 <Link key={report.id} href={`/reports/${report.id}`} data-testid={`link-report-${report.id}`}>
                   <div className="flex items-center justify-between p-4 rounded-xl bg-white/5 hover:bg-white/[0.09] ring-1 ring-white/5 hover:ring-white/15 transition-all group cursor-pointer">
                     <div className="flex items-center gap-4 min-w-0">

@@ -9,7 +9,7 @@ interface HeroProps {
 
 export function Hero({ firmName, tagline, kpis }: HeroProps) {
   return (
-    <section className="relative overflow-hidden rounded-2xl bg-hero-gradient text-shell-hero-fg px-10 md:px-14 pt-14 pb-10 mb-10 shadow-lg">
+    <section className="relative overflow-hidden rounded-2xl bg-hero-gradient text-shell-hero-fg px-8 md:px-12 pt-8 pb-6 mb-8 shadow-lg">
       {/* Decorative grain / vignette */}
       <div className="pointer-events-none absolute inset-0 opacity-[0.04] mix-blend-overlay"
            style={{
@@ -24,17 +24,17 @@ export function Hero({ firmName, tagline, kpis }: HeroProps) {
         transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
         className="relative text-center max-w-3xl mx-auto"
       >
-        <div className="text-eyebrow-lg text-shell-hero-eyebrow mb-5" data-testid="hero-eyebrow">
+        <div className="text-eyebrow-lg text-shell-hero-eyebrow mb-3" data-testid="hero-eyebrow">
           Detailed Project Report
         </div>
         <h1
-          className="font-display text-[44px] md:text-[56px] leading-[1.05] text-shell-hero-fg mb-4"
+          className="font-display text-[30px] md:text-[40px] leading-[1.08] text-shell-hero-fg mb-2.5"
           data-testid="hero-firm"
         >
           {firmName}
         </h1>
         {tagline && (
-          <p className="text-[15px] md:text-base text-shell-hero-fg/65 max-w-xl mx-auto leading-relaxed">
+          <p className="text-[13.5px] md:text-[15px] text-shell-hero-fg/65 max-w-xl mx-auto leading-relaxed">
             {tagline}
           </p>
         )}
@@ -48,7 +48,7 @@ export function Hero({ firmName, tagline, kpis }: HeroProps) {
           hidden: {},
           visible: { transition: { staggerChildren: 0.08, delayChildren: 0.25 } },
         }}
-        className="relative grid grid-cols-2 md:grid-cols-4 gap-4 mt-12"
+        className="relative grid grid-cols-2 md:grid-cols-4 gap-4 mt-7"
       >
         {kpis.map((kpi) => (
           <motion.div

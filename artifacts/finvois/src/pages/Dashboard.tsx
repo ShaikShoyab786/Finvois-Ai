@@ -60,19 +60,19 @@ const NAV: NavSection[] = [
   {
     group: "",
     items: [
-      { id: "overview", label: "Executive Summary" },
-      { id: "profile", label: "Business Profile" },
-      { id: "dashboard", label: "Financial Dashboard" },
-      { id: "pl", label: "P&L Account" },
-      { id: "bs", label: "Balance Sheet" },
-      { id: "ratios", label: "Ratio Analysis" },
-      { id: "leverage", label: "Leverage Ratios" },
-      { id: "cashflow", label: "Cash Flow" },
-      { id: "loan", label: "Loan Schedule" },
-      { id: "eval", label: "Financial Evaluation" },
-      { id: "altman", label: "Altman Z-Score" },
-      { id: "bep", label: "BEP & Sensitivity" },
-      { id: "mpbf", label: "MPBF Assessment" },
+      { id: "overview", label: "Executive Summary", emoji: "📋" },
+      { id: "profile", label: "Business Profile", emoji: "🏢" },
+      { id: "dashboard", label: "Financial Dashboard", emoji: "📊" },
+      { id: "pl", label: "P&L Account", emoji: "💰" },
+      { id: "bs", label: "Balance Sheet", emoji: "⚖️" },
+      { id: "ratios", label: "Ratio Analysis", emoji: "📈" },
+      { id: "leverage", label: "Leverage Ratios", emoji: "🏦" },
+      { id: "cashflow", label: "Cash Flow", emoji: "💵" },
+      { id: "loan", label: "Loan Schedule", emoji: "🗓️" },
+      { id: "eval", label: "Financial Evaluation", emoji: "✅" },
+      { id: "altman", label: "Altman Z-Score", emoji: "🎯" },
+      { id: "bep", label: "BEP & Sensitivity", emoji: "⚡" },
+      { id: "mpbf", label: "MPBF Assessment", emoji: "🧮" },
     ],
   },
 ];
@@ -227,6 +227,7 @@ export default function Dashboard() {
                   : "bg-muted text-muted-foreground"
               }`}
             >
+              {item.emoji && <span className="mr-1.5" aria-hidden="true">{item.emoji}</span>}
               {item.label}
             </button>
           ))}

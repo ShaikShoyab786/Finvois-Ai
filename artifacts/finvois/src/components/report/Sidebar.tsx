@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 
 export type NavSection = {
   group: string;
-  items: { id: string; label: string }[];
+  items: { id: string; label: string; emoji?: string }[];
 };
 
 interface SidebarProps {
@@ -70,13 +70,18 @@ export function Sidebar({ firmName, tagline, activeId, onSelect, sections }: Sid
                     data-testid={`nav-${item.id}`}
                     aria-current={isActive ? "page" : undefined}
                     className={cn(
-                      "w-full text-left px-3 py-2 rounded-md text-[13.5px] font-medium transition-all relative focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring/60",
+                      "w-full text-left px-3 py-2 rounded-md text-[13.5px] font-medium transition-all relative flex items-center gap-2.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring/60",
                       isActive
                         ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-sm"
                         : "text-sidebar-foreground/65 hover:text-sidebar-heading hover:bg-sidebar-foreground/5"
                     )}
                   >
-                    {item.label}
+                    {item.emoji && (
+                      <span className="text-[15px] leading-none flex-shrink-0" aria-hidden="true">
+                        {item.emoji}
+                      </span>
+                    )}
+                    <span>{item.label}</span>
                   </button>
                 );
               })}
