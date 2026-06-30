@@ -30,7 +30,7 @@ export function ReportHeader({ reportId, fiscalYear, verdict }: ReportHeaderProp
   const tone = verdictTone(verdict);
 
   return (
-    <header className="sticky top-0 z-20 bg-background/90 backdrop-blur-md border-b border-border">
+    <header className="sticky top-0 z-20 bg-background/95 border-b border-border">
       <div className="px-8 py-4 flex items-center justify-between gap-4">
         <div className="flex items-center gap-3 min-w-0">
           <Button

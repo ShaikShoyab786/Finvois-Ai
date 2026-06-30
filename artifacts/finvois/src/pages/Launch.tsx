@@ -13,6 +13,7 @@ import {
 } from "@/contexts/theme";
 
 import finnyHello from "@/assets/finny/finny-hello.png";
+import finnyReading from "@/assets/finny/finny-reading.png";
 import finnyAnalyzing from "@/assets/finny/finny-analyzing.png";
 import finnyProcessing from "@/assets/finny/finny-processing.png";
 import finnyDone from "@/assets/finny/finny-done.png";
@@ -32,7 +33,7 @@ interface Stage {
 }
 
 const STAGES: Stage[] = [
-  { at: 0.0, label: "Finny is reading your DPR", sub: "Scanning every page for the numbers that matter…", img: finnyAnalyzing },
+  { at: 0.0, label: "Finny is reading your DPR", sub: "Scanning every page for the numbers that matter…", img: finnyReading },
   { at: 0.18, label: "Extracting financial statements", sub: "Pulling P&L, balance sheet and cash flows…", img: finnyProcessing },
   { at: 0.4, label: "Crunching ratios & DSCR", sub: "Computing leverage, liquidity and coverage…", img: finnyProcessing },
   { at: 0.62, label: "Running viability checks", sub: "Altman Z-Score, break-even and sensitivity…", img: finnyAnalyzing },
@@ -51,12 +52,21 @@ export default function Launch() {
   const [preview, setPreview] = useState<ThemeId>("finny");
   const [progress, setProgress] = useState(0);
   const startedAt = useRef<number | null>(null);
+  const lastPoll = useRef(0);
 
-  // Poll the report while processing so we know when extraction is "ready".
-  const { data: report } = useGetReport(id, {
+  // Poll the report until extraction settles. Keep polling for ANY non-terminal
+  // status (including the brief window before the first response) and stop only
+  // once it's "ready"/"failed". refetchIntervalInBackground is essential here:
+  // the app runs inside the Replit preview iframe, which is often not the
+  // focused window, and React Query pauses interval polling for unfocused
+  // windows by default — that's what left the bar stuck at 95%.
+  const { data: report, refetch } = useGetReport(id, {
     query: {
-      refetchInterval: (q: { state: { data?: { status?: string } } }) =>
-        q.state.data?.status === "processing" ? 1500 : false,
+      refetchInterval: (q: { state: { data?: { status?: string } } }) => {
+        const s = q.state.data?.status;
+        return s === "ready" || s === "failed" ? false : 1500;
+      },
+      refetchIntervalInBackground: true,
     } as never,
   });
   const status = report?.status;
@@ -90,6 +100,9 @@ export default function Launch() {
     if (step !== "processing") return;
     let raf = 0;
     const tick = () => {
+      // Extraction failed: stop the cinematic loop so we don't burn CPU
+      // animating behind the failed-state UI.
+      if (status === "failed") return;
       const start = startedAt.current ?? Date.now();
       const elapsed = Date.now() - start;
       const timeFrac = Math.min(elapsed / MIN_DURATION_MS, 1);
@@ -101,11 +114,21 @@ export default function Launch() {
         setLocation(`/reports/${id}`);
         return;
       }
+      // Safety net: if the cinematic has finished but we still haven't seen a
+      // terminal status, force a (throttled) refetch so a stalled background
+      // poll can never leave the user stranded at 95%.
+      if (timeFrac >= 1 && !ready && status !== "failed") {
+        const now = Date.now();
+        if (now - lastPoll.current > 1500) {
+          lastPoll.current = now;
+          refetch();
+        }
+      }
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [step, status, id, setLocation]);
+  }, [step, status, id, setLocation, refetch]);
 
   const currentStage = useMemo(() => {
     let s = STAGES[0];
