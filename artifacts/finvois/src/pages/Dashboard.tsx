@@ -3597,3 +3597,97 @@ function fmtNum(n: number | null | undefined): string {
   if (n == null || !isFinite(n)) return "—";
   return new Intl.NumberFormat("en-IN", { maximumFractionDigits: 2 }).format(n);
 }
+
+// ═════════════════════════════════════════════════════════
+// PRINTABLE REPORT — every section stacked for PDF export.
+// Rendered visibly by the Export page (so Recharts measures
+// correctly), then printed via window.print(). Each section
+// is wrapped in `.print-section` (page-break-before) and the
+// wide multi-year tables (Loan, MPBF) get `.print-landscape`.
+// ═════════════════════════════════════════════════════════
+export function PrintableReport({
+  report,
+  summary,
+  verdicts,
+  isLoadingSummary,
+  isLoadingVerdicts,
+}: {
+  report: any;
+  summary?: any;
+  verdicts?: any;
+  isLoadingSummary?: boolean;
+  isLoadingVerdicts?: boolean;
+}) {
+  const ed = report?.extractedData;
+  const bp = ed?.businessProfile;
+  const fs = ed?.financialSummary;
+  const v = verdicts;
+  const heroKpis = [
+    { label: "Total Project Cost", value: fs?.totalProjectCost },
+    { label: "Term Loan", value: fs?.termLoan },
+    { label: "Working Capital", value: fs?.workingCapitalLoan },
+    { label: "Equity Capital", value: fs?.equityCapital },
+  ];
+
+  return (
+    <div className="print-root">
+      {/* Executive Summary */}
+      <section className="print-section">
+        <Hero firmName={report?.firmName || "Unnamed Report"} tagline={bp?.lineOfActivity} kpis={heroKpis} />
+        <BriefingCard
+          summary={summary?.summary}
+          keyStrengths={summary?.keyStrengths}
+          riskFactors={summary?.riskFactors}
+          isLoading={isLoadingSummary}
+        />
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {[
+            { label: "Average DSCR", value: fs?.averageDscr },
+            { label: "Fiscal Window", value: fs?.fiscalYear },
+            { label: "Constitution", value: bp?.constitution },
+            { label: "Location", value: bp?.location },
+          ].map((k) => (
+            <KpiTile key={k.label} label={k.label} value={k.value} variant="card" />
+          ))}
+        </div>
+      </section>
+
+      <section className="print-section">
+        <ProfileSection report={report} ed={ed} verdict={v?.profile} isLoadingVerdict={isLoadingVerdicts} />
+      </section>
+      <section className="print-section">
+        <FinancialDashboardSection ed={ed} />
+      </section>
+      <section className="print-section">
+        <PLSection ed={ed} verdict={v?.pl} isLoadingVerdict={isLoadingVerdicts} />
+      </section>
+      <section className="print-section">
+        <BalanceSheetSection ed={ed} verdict={v?.balanceSheet} isLoadingVerdict={isLoadingVerdicts} />
+      </section>
+      <section className="print-section">
+        <RatiosSection ed={ed} verdict={v?.ratios} isLoadingVerdict={isLoadingVerdicts} />
+      </section>
+      <section className="print-section">
+        <LeverageSection ed={ed} />
+      </section>
+      <section className="print-section">
+        <CashFlowSection ed={ed} verdict={v?.cashFlow} isLoadingVerdict={isLoadingVerdicts} />
+      </section>
+      <section className="print-section print-landscape">
+        <LoanSection ed={ed} verdict={v?.loan} isLoadingVerdict={isLoadingVerdicts} />
+      </section>
+      <section className="print-section">
+        <EvaluationSection ed={ed} verdict={v?.evaluation} isLoadingVerdict={isLoadingVerdicts} />
+      </section>
+      <section className="print-section">
+        <AltmanSection ed={ed} />
+      </section>
+      <section className="print-section">
+        <BreakEvenSection ed={ed} />
+      </section>
+      <section className="print-section print-landscape">
+        <MpbfSection ed={ed} />
+      </section>
+    </div>
+  );
+}
