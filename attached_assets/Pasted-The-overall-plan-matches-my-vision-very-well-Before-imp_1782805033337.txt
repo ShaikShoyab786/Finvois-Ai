@@ -1,0 +1,88 @@
+The overall plan matches my vision very well. Before implementation, I want to make a few refinements so we build the product exactly as intended.
+
+1. Theme Selection Flow (Important)
+
+Please change the flow.
+
+Instead of:
+
+Upload → Processing → Theme Selection → Dashboard
+
+I want:
+
+Upload DPR → Choose Theme → Finny Processing Experience → Dashboard
+
+The user should choose the report theme before AI starts generating the dashboard. That selected theme must then be applied throughout the processing experience, the dashboard shell, and the exported PDF.
+
+2. Finny Processing Experience
+
+Our AI extraction is already very fast (around 5–6 seconds), but I want the product to feel premium rather than instantaneous.
+
+Instead of jumping directly to the dashboard, create a beautiful Finny experience lasting around 25–30 seconds.
+
+The stages should feel cinematic rather than pretending to show exact backend progress.
+
+Example journey:
+
+👋 Hi! I'm Finny. Let me read your DPR.
+🤔 Understanding your business...
+💻 Analyzing financial statements...
+📊 Finding key financial insights...
+📄 Designing your beautiful dashboard...
+🎉 Report Ready!
+
+The animation should complete naturally and then open the dashboard.
+
+This is a product experience, not a fake loading bar.
+
+3. Theme Scope (Very Important)
+
+Themes must ONLY affect the branding shell.
+
+Allowed:
+
+Landing page
+Upload screen
+Processing experience
+Sidebar
+Report Header
+Executive Summary Hero
+Buttons
+Branding colors
+PDF branding shell
+
+Do NOT change:
+
+KPI cards
+Charts
+Graph colors
+Tables
+Financial layouts
+Visualizations
+Financial section styling
+
+Financial data presentation must remain identical across all themes.
+
+4. Theme Preview Cards
+
+Instead of simple radio buttons, I want three premium preview cards.
+
+Each theme should have:
+
+Theme preview
+Theme name
+Short description
+
+Example:
+
+Finny Signature
+Premium Black & Gold
+Best for Investors
+
+Professional Blue
+Classic Banking Theme
+Best for Banks
+
+Executive White
+Luxury White & Gold
+Best for Presentations

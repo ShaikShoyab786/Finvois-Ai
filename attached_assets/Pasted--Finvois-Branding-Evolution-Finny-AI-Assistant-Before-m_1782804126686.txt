@@ -1,0 +1,171 @@
+# Finvois Branding Evolution – Finny AI Assistant
+
+Before making any implementation changes, I want to explain the next evolution of the Finvois product experience.
+
+This is not just a UI update.
+
+This is a branding update for the entire application.
+
+I have attached three reference images:
+
+1. Finny mascot concept (black & gold theme)
+2. Current upload page
+3. Current dashboard
+
+Please study them before planning any implementation.
+
+---
+
+## Product Vision
+
+I want Finvois AI Assistant to feel like a real AI product with its own identity.
+
+The mascot's name is **Finny**.
+
+Finny will become the face of the Finvois platform.
+
+Whenever users upload a DPR, wait for processing, or receive their dashboard, they should feel that Finny is personally helping them through the journey.
+
+Think of Finny like:
+
+* GitHub → Octocat
+* Duolingo → Duo
+* Mailchimp → Freddie
+
+Finny should become instantly recognizable throughout the product.
+
+---
+
+# Landing / Upload Screen
+
+Currently the upload page looks very plain and functional.
+
+I want to redesign only this experience.
+
+Instead of a simple upload card, I want a welcoming hero section introducing Finny.
+
+Example messaging:
+
+"Hi, I'm Finny!"
+
+"I'll transform your DPR into a beautiful financial dashboard."
+
+The upload area should become part of this premium onboarding experience instead of looking like a basic file uploader.
+
+---
+
+# Dashboard Themes
+
+I do NOT want to redesign the financial dashboard itself.
+
+Please keep:
+
+* KPI cards
+* Charts
+* Tables
+* Graphs
+* Financial layouts
+* Visualizations
+
+exactly as they are.
+
+Only the branding shell should become themeable.
+
+Theme affects ONLY:
+
+• Sidebar
+• Executive Summary hero banner
+• Header branding
+
+Everything inside the financial sections must remain identical.
+
+---
+
+# Theme Selection
+
+After the user uploads a DPR (or before opening the dashboard), allow them to choose a dashboard theme.
+
+Version 1 only needs three themes.
+
+### Theme 1
+
+Finny Signature Theme
+
+Black
+Gold
+Premium
+Luxury
+
+(The attached mascot artwork is the reference.)
+
+---
+
+### Theme 2
+
+Current Blue Theme
+
+Keep the existing professional blue appearance.
+
+---
+
+### Theme 3
+
+White + Gold Theme
+
+Luxury light version with the same dashboard structure.
+
+---
+
+Changing the theme should only affect the branding shell.
+
+The financial content must stay unchanged.
+
+The generated PDF should automatically use the same selected theme.
+
+---
+
+# AI Processing Experience
+
+Currently users immediately see a loading spinner.
+
+Instead I want Finny to guide users through the processing journey.
+
+Examples:
+
+Reading your DPR...
+
+Analyzing Financial Statements...
+
+Extracting Business Data...
+
+Generating Financial Dashboard...
+
+Preparing Investor Report...
+
+Almost Done...
+
+Report Ready!
+
+Instead of a generic spinner, Finny should appear with different expressions and poses during each stage.
+
+These should feel warm, premium, and engaging.
+
+---
+
+# Important Constraint
+
+This is a branding enhancement.
+
+It should NOT change:
+
+• financial extraction
+• AI pipeline
+• dashboard architecture
+• KPI layouts
+• chart layouts
+• tables
+• financial calculations
+
+Only improve the overall user experience and product identity.
+
+Please first explain how you would implement this branding system before writing any code.
