@@ -22,6 +22,3 @@ These DPR PDFs typically state working capital only via the "Total Current Asset
 ## Verified calibration (report 6 = SIMHADRI INFRA METALS)
 Altman Z: 1.54 (distress) → 8.04 (safe) across years; A=NWC/TA, B=netProfit/TA, C=ebit/TA, D=netCapital/(TA−netCapital), E=revenue/TA, Z=1.2A+1.4B+3.3C+0.6D+1.0E.
 BEP year1 ≈ 29,787 KGs, MOS 17.98%. MPBF KPIs ₹13.50L / 6.15L / 5.02L.
-
-## Unrelated pre-existing error
-`pnpm run typecheck` reports a TS7016 for `pdf-parse/lib/pdf-parse.js` in api-server. This is pre-existing and unrelated to finvois work — finvois typechecks clean on its own.

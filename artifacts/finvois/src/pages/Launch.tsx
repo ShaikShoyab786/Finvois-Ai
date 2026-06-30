@@ -107,8 +107,19 @@ export default function Launch() {
       const elapsed = Date.now() - start;
       const timeFrac = Math.min(elapsed / MIN_DURATION_MS, 1);
       const ready = status === "ready";
-      // Hold at 95% until ready; snap to 100% once both conditions met.
-      const target = ready ? timeFrac : Math.min(timeFrac, 0.95);
+      // While processing, track the cinematic up to 95%. Once the cinematic has
+      // elapsed but the report still isn't ready, keep the bar visibly alive by
+      // creeping asymptotically toward 0.99 (instead of freezing at 95%, which
+      // reads as "stuck"). Snap to 100% the moment the report is ready.
+      let target: number;
+      if (ready) {
+        target = timeFrac;
+      } else if (timeFrac < 1) {
+        target = Math.min(timeFrac, 0.95);
+      } else {
+        const waitMs = elapsed - MIN_DURATION_MS;
+        target = 0.95 + 0.04 * (1 - Math.exp(-waitMs / 9000));
+      }
       setProgress(target);
       if (timeFrac >= 1 && ready) {
         setLocation(`/reports/${id}`);

@@ -3,12 +3,70 @@ import multer from "multer";
 // Import the internal module to avoid pdf-parse@1.1.1 reading a test file at startup
 import pdfParse from "pdf-parse/lib/pdf-parse.js";
 import { db, reportsTable } from "@workspace/db";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, sql } from "drizzle-orm";
 import { extractDprData, extractSupplementalDpr, generateExecutiveSummary, generateSectionVerdicts } from "../lib/extractDpr";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
+
+/**
+ * Background pipeline for a single report: extract the DPR, then pre-generate
+ * the AI executive summary and per-section verdicts BEFORE flipping status to
+ * "ready". The launch cinematic waits on "ready", so this work is covered by
+ * that window and the dashboard opens with the briefing already in place
+ * instead of kicking off ~15s LLM calls after the user arrives. The summary and
+ * verdicts are cached inside extractedData (reserved `_executiveSummary` /
+ * `_sectionVerdicts` keys) so no schema/migration is required. A failure in the
+ * AI step does NOT block the report from becoming ready — those endpoints fall
+ * back to on-demand generation.
+ */
+async function processReport(id: number, rawText: string): Promise<void> {
+  try {
+    const extractedData = await extractDprData(rawText);
+    const bp = extractedData.businessProfile as Record<string, unknown> | undefined;
+    const fs = extractedData.financialSummary as Record<string, unknown> | undefined;
+
+    const [summaryRes, verdictsRes] = await Promise.allSettled([
+      generateExecutiveSummary(extractedData),
+      generateSectionVerdicts(extractedData),
+    ]);
+    if (summaryRes.status === "rejected") {
+      logger.error({ id, err: summaryRes.reason }, "Executive summary generation failed; will lazy-generate on demand");
+    }
+    if (verdictsRes.status === "rejected") {
+      logger.error({ id, err: verdictsRes.reason }, "Section verdicts generation failed; will lazy-generate on demand");
+    }
+
+    const enriched: Record<string, unknown> = {
+      ...extractedData,
+      _executiveSummary: summaryRes.status === "fulfilled" ? summaryRes.value : null,
+      _sectionVerdicts: verdictsRes.status === "fulfilled" ? verdictsRes.value : null,
+    };
+
+    await db
+      .update(reportsTable)
+      .set({
+        firmName: (bp?.firmName as string) || "Unknown Firm",
+        proprietorName: (bp?.proprietorName as string) || "Unknown Proprietor",
+        lineOfActivity: (bp?.lineOfActivity as string) || null,
+        totalProjectCost: (fs?.totalProjectCost as string) || null,
+        extractedData: enriched,
+        status: "ready",
+        errorMessage: null,
+      })
+      .where(eq(reportsTable.id, id));
+
+    logger.info({ id }, "Report processing completed (extraction + AI briefing)");
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    logger.error({ err, id }, "Report processing failed");
+    await db
+      .update(reportsTable)
+      .set({ status: "failed", errorMessage: errMsg })
+      .where(eq(reportsTable.id, id));
+  }
+}
 
 router.get("/reports", async (req, res): Promise<void> => {
   const reports = await db
@@ -71,39 +129,8 @@ router.post("/reports/upload", upload.single("file"), async (req, res): Promise<
     extractedData: {},
   });
 
-  setImmediate(async () => {
-    try {
-      const extractedData = await extractDprData(rawText);
-
-      const bp = extractedData.businessProfile as Record<string, unknown> | undefined;
-      const fs = extractedData.financialSummary as Record<string, unknown> | undefined;
-
-      const firmName = (bp?.firmName as string) || "Unknown Firm";
-      const proprietorName = (bp?.proprietorName as string) || "Unknown Proprietor";
-      const lineOfActivity = (bp?.lineOfActivity as string) || null;
-      const totalProjectCost = (fs?.totalProjectCost as string) || null;
-
-      await db
-        .update(reportsTable)
-        .set({
-          firmName,
-          proprietorName,
-          lineOfActivity,
-          totalProjectCost,
-          extractedData,
-          status: "ready",
-        })
-        .where(eq(reportsTable.id, placeholder.id));
-
-      logger.info({ id: placeholder.id }, "Report extraction completed");
-    } catch (err) {
-      const errMsg = err instanceof Error ? err.message : String(err);
-      logger.error({ err, id: placeholder.id }, "Report extraction failed");
-      await db
-        .update(reportsTable)
-        .set({ status: "failed", errorMessage: errMsg })
-        .where(eq(reportsTable.id, placeholder.id));
-    }
+  setImmediate(() => {
+    void processReport(placeholder.id, rawText);
   });
 });
 
@@ -132,32 +159,8 @@ router.post("/reports/:id/retry", async (req, res): Promise<void> => {
 
   res.status(202).json({ id, status: "processing" });
 
-  setImmediate(async () => {
-    try {
-      const extractedData = await extractDprData(report.rawText!);
-      const bp = extractedData.businessProfile as Record<string, unknown> | undefined;
-      const fs = extractedData.financialSummary as Record<string, unknown> | undefined;
-
-      await db
-        .update(reportsTable)
-        .set({
-          firmName: (bp?.firmName as string) || "Unknown Firm",
-          proprietorName: (bp?.proprietorName as string) || "Unknown Proprietor",
-          lineOfActivity: (bp?.lineOfActivity as string) || null,
-          totalProjectCost: (fs?.totalProjectCost as string) || null,
-          extractedData,
-          status: "ready",
-        })
-        .where(eq(reportsTable.id, id));
-      logger.info({ id }, "Report retry succeeded");
-    } catch (err) {
-      const errMsg = err instanceof Error ? err.message : String(err);
-      logger.error({ err, id }, "Report retry failed");
-      await db
-        .update(reportsTable)
-        .set({ status: "failed", errorMessage: errMsg })
-        .where(eq(reportsTable.id, id));
-    }
+  setImmediate(() => {
+    void processReport(id, report.rawText!);
   });
 });
 
@@ -316,13 +319,27 @@ router.get("/reports/:id/summary", async (req, res): Promise<void> => {
     return;
   }
 
-  if (report.status !== "ready" || !report.extractedData) {
+  const ed = report.extractedData as Record<string, unknown> | null;
+  if (report.status !== "ready" || !ed) {
     res.status(400).json({ error: "Report is not yet processed. Please wait for extraction to complete." });
     return;
   }
 
+  // Serve the briefing pre-generated during background processing; only fall
+  // back to an on-demand LLM call for older reports that predate caching.
+  const cachedSummary = ed._executiveSummary as Record<string, unknown> | null | undefined;
+  if (cachedSummary) {
+    res.json({ id, ...cachedSummary });
+    return;
+  }
+
   try {
-    const summary = await generateExecutiveSummary(report.extractedData as Record<string, unknown>);
+    const summary = await generateExecutiveSummary(ed);
+    const patch = JSON.stringify({ _executiveSummary: summary });
+    await db
+      .update(reportsTable)
+      .set({ extractedData: sql`COALESCE(${reportsTable.extractedData}, '{}'::jsonb) || ${patch}::jsonb` })
+      .where(eq(reportsTable.id, id));
     res.json({ id, ...summary });
   } catch (err) {
     req.log.error({ err }, "Failed to generate executive summary");
@@ -349,13 +366,25 @@ router.get("/reports/:id/verdicts", async (req, res): Promise<void> => {
     return;
   }
 
-  if (report.status !== "ready" || !report.extractedData) {
+  const ed = report.extractedData as Record<string, unknown> | null;
+  if (report.status !== "ready" || !ed) {
     res.status(400).json({ error: "Report is not yet processed. Please wait for extraction to complete." });
     return;
   }
 
+  const cachedVerdicts = ed._sectionVerdicts as Record<string, unknown> | null | undefined;
+  if (cachedVerdicts) {
+    res.json({ id, verdicts: cachedVerdicts });
+    return;
+  }
+
   try {
-    const verdicts = await generateSectionVerdicts(report.extractedData as Record<string, unknown>);
+    const verdicts = await generateSectionVerdicts(ed);
+    const patch = JSON.stringify({ _sectionVerdicts: verdicts });
+    await db
+      .update(reportsTable)
+      .set({ extractedData: sql`COALESCE(${reportsTable.extractedData}, '{}'::jsonb) || ${patch}::jsonb` })
+      .where(eq(reportsTable.id, id));
     res.json({ id, verdicts });
   } catch (err) {
     req.log.error({ err }, "Failed to generate section verdicts");
