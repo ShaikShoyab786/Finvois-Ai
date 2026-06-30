@@ -378,15 +378,120 @@
   }
 }
 
+/* ────────────────────────────────────────────────────────────
+   PRINT / PDF EXPORT (A4)
+   The Export page renders the full report visibly (so Recharts
+   measures correctly) and that same DOM is the print source.
+   On-screen it sits on a fixed-width "paper"; in print it flows
+   to the page width, one section per page.
+   ──────────────────────────────────────────────────────────── */
+.print-page-shell {
+  width: 760px;
+  max-width: 100%;
+  padding: 32px;
+}
+.print-root {
+  width: 100%;
+}
+.print-section + .print-section {
+  margin-top: 2.5rem;
+}
+/* A4 portrait is too narrow for 4-up KPI tiles; the print viewport collapses
+   them to 2-up anyway, so force 2 columns in the preview to match the PDF. */
+.print-root .grid:has(> [data-testid^="kpi-"]),
+.print-root .grid:has(> * > [data-testid^="kpi-"]) {
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+}
+
 @media print {
-  body {
-    background-color: white !important;
-    color: black !important;
+  @page {
+    size: A4 portrait;
+    margin: 8mm;
   }
+  /* Wide multi-year tables (Loan Schedule, MPBF) print landscape */
+  @page landscape {
+    size: A4 landscape;
+    margin: 8mm;
+  }
+
+  /* Preserve every theme/financial color in the PDF */
+  *,
+  *::before,
+  *::after {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  body {
+    background: #ffffff !important;
+  }
+
   .no-print {
     display: none !important;
   }
-  .print-only {
+
+  /* Drop the on-screen page chrome down to bare paper */
+  .export-stage {
+    background: #ffffff !important;
+  }
+  .print-stage {
     display: block !important;
+    padding: 0 !important;
+  }
+  .print-page-shell {
+    width: auto !important;
+    max-width: none !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+  }
+
+  /* Each report section starts on a fresh page */
+  .print-section {
+    break-before: page;
+    margin-top: 0 !important;
+  }
+  .print-section:first-child {
+    break-before: avoid;
+  }
+
+  /* Wide sections rotate to landscape pages */
+  .print-landscape {
+    page: landscape;
+  }
+
+  /* Never split a card, chart, or table across a page boundary */
+  .surface-card,
+  .print-root table,
+  .recharts-wrapper,
+  .recharts-responsive-container {
+    break-inside: avoid;
+  }
+
+  /* Show wide tables fully (no clipped horizontal scroll on paper) */
+  .print-root .overflow-x-auto {
+    overflow: visible !important;
+  }
+
+  /* Compact the portrait multi-year matrix tables so they fit page width */
+  .print-section:not(.print-landscape) table {
+    font-size: 10.5px;
+  }
+  .print-section:not(.print-landscape) table th,
+  .print-section:not(.print-landscape) table td {
+    padding-left: 6px !important;
+    padding-right: 6px !important;
+  }
+
+  /* Loan / MPBF tables get extra compaction so they degrade gracefully and
+     stay legible even on engines that ignore the named landscape page. */
+  .print-landscape table {
+    font-size: 10px;
+  }
+  .print-landscape table th,
+  .print-landscape table td {
+    padding-left: 6px !important;
+    padding-right: 6px !important;
   }
 }
