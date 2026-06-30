@@ -2395,7 +2395,10 @@ type MatrixRow = {
   indent?: boolean;
   tone?: "blue" | "rose" | "emerald";
 };
-function MatrixTable({ years, rows, firstColLabel = "Particulars" }: { years: string[]; rows: MatrixRow[]; firstColLabel?: string }) {
+// Renders one matrix table for a given subset of year-column indices. Pulling
+// this out lets the print path split a wide table's year columns across several
+// pages while repeating the first ("Particulars") label column on each.
+function MatrixTableGrid({ years, yearIdx, rows, firstColLabel }: { years: string[]; yearIdx: number[]; rows: MatrixRow[]; firstColLabel: string }) {
   return (
     <div className="surface-card rounded-2xl overflow-hidden">
       <div className="overflow-x-auto">
@@ -2403,8 +2406,8 @@ function MatrixTable({ years, rows, firstColLabel = "Particulars" }: { years: st
           <thead>
             <tr className="bg-primary">
               <th className="text-eyebrow text-white/85 py-3.5 px-4 text-left whitespace-nowrap">{firstColLabel}</th>
-              {years.map((y, i) => (
-                <th key={i} className="text-eyebrow text-white/85 text-right px-4 whitespace-nowrap">{shortYear(y)}</th>
+              {yearIdx.map((yi) => (
+                <th key={yi} className="text-eyebrow text-white/85 text-right px-4 whitespace-nowrap">{shortYear(years[yi])}</th>
               ))}
             </tr>
           </thead>
@@ -2413,7 +2416,7 @@ function MatrixTable({ years, rows, firstColLabel = "Particulars" }: { years: st
               if (r.kind === "section") {
                 return (
                   <tr key={ri} className="bg-muted/60 border-t border-border">
-                    <td colSpan={years.length + 1} className="text-eyebrow text-muted-foreground/90 px-4 py-2">{r.label}</td>
+                    <td colSpan={yearIdx.length + 1} className="text-eyebrow text-muted-foreground/90 px-4 py-2">{r.label}</td>
                   </tr>
                 );
               }
@@ -2422,8 +2425,8 @@ function MatrixTable({ years, rows, firstColLabel = "Particulars" }: { years: st
               return (
                 <tr key={ri} className={`border-t border-border ${r.bold ? "bg-muted/30" : ""}`}>
                   <td className={`text-[13px] py-2.5 px-4 whitespace-nowrap ${r.bold ? "font-semibold" : ""} ${r.indent ? "pl-8 text-foreground/80" : ""}`}>{r.label}</td>
-                  {years.map((_, ci) => (
-                    <td key={ci} className={`text-right num-tabular text-[13px] px-4 ${r.bold ? "font-semibold" : ""} ${toneCls}`}>{fmt(r.values?.[ci])}</td>
+                  {yearIdx.map((yi) => (
+                    <td key={yi} className={`text-right num-tabular text-[13px] px-4 ${r.bold ? "font-semibold" : ""} ${toneCls}`}>{fmt(r.values?.[yi])}</td>
                   ))}
                 </tr>
               );
@@ -2432,6 +2435,36 @@ function MatrixTable({ years, rows, firstColLabel = "Particulars" }: { years: st
         </table>
       </div>
     </div>
+  );
+}
+function MatrixTable({ years, rows, firstColLabel = "Particulars", printChunkSize }: { years: string[]; rows: MatrixRow[]; firstColLabel?: string; printChunkSize?: number }) {
+  const allIdx = years.map((_, i) => i);
+
+  // No splitting needed (or not requested): one table for screen and print.
+  if (!printChunkSize || years.length <= printChunkSize) {
+    return <MatrixTableGrid years={years} yearIdx={allIdx} rows={rows} firstColLabel={firstColLabel} />;
+  }
+
+  // Too many fiscal years to fit a page even in landscape: keep the scrollable
+  // table on screen, but for the PDF split the year columns into chunks — each
+  // chunk repeats the label column and prints on its own page.
+  const chunks: number[][] = [];
+  for (let i = 0; i < allIdx.length; i += printChunkSize) {
+    chunks.push(allIdx.slice(i, i + printChunkSize));
+  }
+  return (
+    <>
+      <div className="no-print">
+        <MatrixTableGrid years={years} yearIdx={allIdx} rows={rows} firstColLabel={firstColLabel} />
+      </div>
+      <div className="print-only">
+        {chunks.map((idx, ci) => (
+          <div key={ci} className={`matrix-chunk${ci > 0 ? " matrix-chunk-break" : ""}`}>
+            <MatrixTableGrid years={years} yearIdx={idx} rows={rows} firstColLabel={firstColLabel} />
+          </div>
+        ))}
+      </div>
+    </>
   );
 }
 
@@ -3190,6 +3223,7 @@ function MpbfSection({ ed }: { ed: any }) {
         <div className="text-eyebrow text-gold mb-2">MPBF Working Capital Assessment (₹)</div>
         <MatrixTable
           years={years}
+          printChunkSize={6}
           rows={[
             { kind: "section", label: "Current Assets" },
             ...(hasSplit

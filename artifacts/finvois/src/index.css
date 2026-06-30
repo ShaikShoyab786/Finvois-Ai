@@ -402,6 +402,11 @@
 .print-root .grid:has(> * > [data-testid^="kpi-"]) {
   grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
 }
+/* Column-split fallback markup for wide matrix tables: the chunked copy only
+   exists for the printed PDF, the scrollable copy only for the screen. */
+.print-only {
+  display: none;
+}
 
 @media print {
   @page {
@@ -428,6 +433,16 @@
 
   .no-print {
     display: none !important;
+  }
+  .print-only {
+    display: block !important;
+  }
+  /* Each year-column chunk of a split wide table prints on its own page */
+  .matrix-chunk-break {
+    break-before: page;
+  }
+  .matrix-chunk + .matrix-chunk {
+    margin-top: 1.25rem;
   }
 
   /* Drop the on-screen page chrome down to bare paper */
@@ -493,5 +508,14 @@
   .print-landscape table td {
     padding-left: 6px !important;
     padding-right: 6px !important;
+  }
+  /* Allow wide-table headers to wrap so the Loan Schedule (years-as-rows, many
+     metric columns) still fits page width even when landscape is ignored. */
+  .print-landscape thead th {
+    white-space: normal !important;
+  }
+  /* Keep each split chunk intact on its page */
+  .matrix-chunk {
+    break-inside: avoid;
   }
 }
