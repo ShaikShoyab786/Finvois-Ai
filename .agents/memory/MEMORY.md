@@ -1,3 +1,3 @@
 - [Finvois DPR dashboard](finvois-dpr-dashboard.md) — Loan/Altman/BEP computed client-side from extracted financials; RM/WIP/FG split usually null (DPRs use Total CA Method); only mpbfSchedule+productionSeries extracted.
 - [Finvois theming](finvois-theming.md) — per-report 3-theme shell (finny/blue/white-gold); theme ONLY `--shell-*`+`--sidebar-*`, NEVER `--brand`/`--gold`/`--chart-*` (financial must stay identical).
-- [Finvois PDF export](finvois-pdf-export.md) — export prints real dashboard DOM via PrintableReport; wide tables: landscape first, then MatrixTable printChunkSize splits year columns (repeat Particulars); never rely solely on named @page landscape.
+- [Finvois PDF export](finvois-pdf-export.md) — A4 LANDSCAPE, real dashboard DOM; Download PDF = html2canvas-pro (never classic, oklch) + jspdf, one capture PER SECTION (per-block too slow), slice at block boundaries.

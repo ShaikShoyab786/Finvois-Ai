@@ -386,9 +386,11 @@
    to the page width, one section per page.
    ──────────────────────────────────────────────────────────── */
 .print-page-shell {
-  width: 760px;
+  /* A4 landscape at 96dpi: 297mm ≈ 1123px; 8mm margins leave ~1062px of
+     content, so the preview paper matches the downloaded PDF proportions. */
+  width: 1122px;
   max-width: 100%;
-  padding: 32px;
+  padding: 30px;
 }
 .print-root {
   width: 100%;
@@ -396,25 +398,27 @@
 .print-section + .print-section {
   margin-top: 2.5rem;
 }
-/* A4 portrait is too narrow for 4-up KPI tiles; the print viewport collapses
-   them to 2-up anyway, so force 2 columns in the preview to match the PDF. */
-.print-root .grid:has(> [data-testid^="kpi-"]),
-.print-root .grid:has(> * > [data-testid^="kpi-"]) {
-  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-}
 /* Column-split fallback markup for wide matrix tables: the chunked copy only
-   exists for the printed PDF, the scrollable copy only for the screen. */
+   exists for the exported PDF, the scrollable copy only for the screen. */
 .print-only {
   display: none;
 }
 
+/* ── PDF capture mode ─────────────────────────────────────
+   Applied to .print-root while the Download PDF snapshot runs so the
+   capture sees the same DOM the print stylesheet would produce. */
+.pdf-capture .no-print {
+  display: none !important;
+}
+.pdf-capture .print-only {
+  display: block !important;
+}
+.pdf-capture .overflow-x-auto {
+  overflow: visible !important;
+}
+
 @media print {
   @page {
-    size: A4 portrait;
-    margin: 8mm;
-  }
-  /* Wide multi-year tables (Loan Schedule, MPBF) print landscape */
-  @page landscape {
     size: A4 landscape;
     margin: 8mm;
   }
@@ -471,17 +475,20 @@
     break-before: avoid;
   }
 
-  /* Wide sections rotate to landscape pages */
-  .print-landscape {
-    page: landscape;
-  }
-
   /* Never split a card, chart, or table across a page boundary */
   .surface-card,
   .print-root table,
   .recharts-wrapper,
-  .recharts-responsive-container {
+  .recharts-responsive-container,
+  .print-keep {
     break-inside: avoid;
+  }
+
+  /* Never strand a heading at the bottom of a page apart from its content */
+  .print-root h1,
+  .print-root h2,
+  .print-root h3 {
+    break-after: avoid;
   }
 
   /* Show wide tables fully (no clipped horizontal scroll on paper) */
@@ -489,28 +496,18 @@
     overflow: visible !important;
   }
 
-  /* Compact the portrait multi-year matrix tables so they fit page width */
-  .print-section:not(.print-landscape) table {
-    font-size: 10.5px;
-  }
-  .print-section:not(.print-landscape) table th,
-  .print-section:not(.print-landscape) table td {
-    padding-left: 6px !important;
-    padding-right: 6px !important;
-  }
-
-  /* Loan / MPBF tables get extra compaction so they degrade gracefully and
-     stay legible even on engines that ignore the named landscape page. */
+  /* Compact the wide multi-year tables (Loan Schedule, MPBF) so they fit
+     the landscape page width comfortably. */
   .print-landscape table {
-    font-size: 10px;
+    font-size: 11px;
   }
   .print-landscape table th,
   .print-landscape table td {
-    padding-left: 6px !important;
-    padding-right: 6px !important;
+    padding-left: 8px !important;
+    padding-right: 8px !important;
   }
-  /* Allow wide-table headers to wrap so the Loan Schedule (years-as-rows, many
-     metric columns) still fits page width even when landscape is ignored. */
+  /* Allow wide-table headers to wrap so the Loan Schedule (years-as-rows,
+     many metric columns) never overflows the page width. */
   .print-landscape thead th {
     white-space: normal !important;
   }

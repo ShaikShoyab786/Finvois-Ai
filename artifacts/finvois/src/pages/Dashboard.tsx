@@ -515,7 +515,7 @@ function ImplementationTimeline({ ed }: { ed: any }) {
     "bg-emerald-50 border-emerald-200",
   ];
   return (
-    <div className="mt-12">
+    <div className="mt-12 print-keep">
       <h3 className="font-display text-[22px] mb-5">Implementation Timeline</h3>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {phases.map((p, i) => (
@@ -536,7 +536,7 @@ function ProductPortfolioTable({ ed }: { ed: any }) {
   const products: any[] = ed?.productPortfolio || ed?.businessProfile?.productPortfolio;
   if (!Array.isArray(products) || products.length === 0) return null;
   return (
-    <div className="mt-12">
+    <div className="mt-12 print-keep">
       <h3 className="font-display text-[22px] mb-5">Product Portfolio</h3>
       <div className="surface-card rounded-2xl overflow-hidden">
         <div className="overflow-x-auto">
@@ -3223,7 +3223,7 @@ function MpbfSection({ ed }: { ed: any }) {
         <div className="text-eyebrow text-gold mb-2">MPBF Working Capital Assessment (₹)</div>
         <MatrixTable
           years={years}
-          printChunkSize={6}
+          printChunkSize={9}
           rows={[
             { kind: "section", label: "Current Assets" },
             ...(hasSplit
