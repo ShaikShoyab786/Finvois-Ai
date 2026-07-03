@@ -9,7 +9,10 @@ _Replace the heading above with the project's name, and this line with one sente
 - `pnpm run build` — typecheck + build all packages
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
 - `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
+- `pnpm run build:prod` + `pnpm run start:prod` — single-service production build/run (server also serves the built frontend; used by Render)
 - Required env: `DATABASE_URL` — Postgres connection string
+- AI: uses `ANTHROPIC_API_KEY` (user's own key, standard endpoint) when set; otherwise falls back to the Replit AI proxy vars — see `artifacts/api-server/src/lib/extractDpr.ts`
+- External deployment: `render.yaml` blueprint + `DEPLOYMENT.md` guide (GitHub → Render)
 
 ## Stack
 

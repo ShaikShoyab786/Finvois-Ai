@@ -2,10 +2,25 @@ import Anthropic from "@anthropic-ai/sdk";
 import { jsonrepair } from "jsonrepair";
 import { logger } from "./logger";
 
-const client = new Anthropic({
-  baseURL: process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL,
-  apiKey: process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY,
-});
+// Prefer the user's own Anthropic API key (standard api.anthropic.com
+// endpoint). Fall back to the Replit-managed AI proxy when it is not set,
+// so development on Replit keeps working without any extra configuration.
+const client = process.env.ANTHROPIC_API_KEY
+  ? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+  : new Anthropic({
+      baseURL: process.env.AI_INTEGRATIONS_ANTHROPIC_BASE_URL,
+      apiKey: process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY,
+    });
+
+if (
+  !process.env.ANTHROPIC_API_KEY &&
+  !process.env.AI_INTEGRATIONS_ANTHROPIC_API_KEY
+) {
+  logger.warn(
+    "No Anthropic credentials found: set ANTHROPIC_API_KEY (or run inside " +
+      "Replit for the managed AI proxy). AI-powered DPR analysis will fail.",
+  );
+}
 
 const EXTRACTION_PROMPT = `You are a financial analyst specializing in DPR (Detailed Project Report) analysis for MSME business loan proposals in India.
 
