@@ -54,8 +54,11 @@ export default function Export() {
     setPdfError(null);
     setPdfProgress({ done: 0, total: 0 });
     try {
-      await generateReportPdf(root, reportPdfFilename(report?.firmName), (p) =>
-        setPdfProgress(p),
+      await generateReportPdf(
+        root,
+        reportPdfFilename(report?.firmName),
+        (p) => setPdfProgress(p),
+        { firmName: report?.firmName },
       );
     } catch {
       setPdfError("Could not generate the PDF. Please try again or use Print instead.");
