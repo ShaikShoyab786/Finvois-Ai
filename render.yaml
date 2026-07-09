@@ -3,7 +3,7 @@ services:
     name: finvois
     runtime: node
     plan: starter
-    buildCommand: npm install -g pnpm@10.26.1 && pnpm install --frozen-lockfile --prod=false && pnpm run build:prod
+    buildCommand: pnpm install --frozen-lockfile --prod=false && pnpm run build:prod
     startCommand: pnpm run start:prod
     preDeployCommand: pnpm run db:push
     healthCheckPath: /api/healthz

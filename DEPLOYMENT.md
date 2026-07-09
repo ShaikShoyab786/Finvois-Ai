@@ -84,7 +84,7 @@ See `.env.example` for the full list. In short:
 ## Running locally (optional, for developers)
 
 ```bash
-npm install -g pnpm@10.26.1
+npm install -g pnpm@10.26.1   # skip if pnpm is already installed
 pnpm install
 cp .env.example .env   # fill in DATABASE_URL and ANTHROPIC_API_KEY
 pnpm run db:push       # create the database tables
