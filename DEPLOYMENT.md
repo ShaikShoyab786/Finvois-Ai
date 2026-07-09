@@ -84,7 +84,7 @@ See `.env.example` for the full list. In short:
 ## Running locally (optional, for developers)
 
 ```bash
-corepack enable && corepack prepare pnpm@10.26.1 --activate
+npm install -g pnpm@10.26.1
 pnpm install
 cp .env.example .env   # fill in DATABASE_URL and ANTHROPIC_API_KEY
 pnpm run db:push       # create the database tables
